@@ -3,9 +3,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.core.exceptions import NL2SQLError
-from app.core.logging import get_logger
+from app.core.logging import get_logger, setup_logging
 from app.router.chat import router as chat_router
 
+setup_logging()
 logger = get_logger(__name__)
 
 app = FastAPI(title="NL2SQL")
