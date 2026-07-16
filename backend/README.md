@@ -18,12 +18,16 @@ We're designing this piece by piece — agree on a step, build it, test it, then
   - `chat_history` persistence is **stateless**: the server doesn't keep sessions. `POST /chat` accepts an optional `history` array and returns the updated one; the caller resends it next turn. (Revisit a server-side session/checkpointer later if this gets unwieldy.)
   - Tested live: direct chit-chat, a DB-shaped question looping against the `sql_agent` stub, and a two-turn conversation where "how many rows does **it** have?" correctly resolved to the `orders` table mentioned in the prior turn.
 - [x] `sql_agent` is real:
-  - `POST /connect` (`app/router/connection.py`) takes db_type/host/port/user/password/dbname, tests the connection, and caches the schema — single active connection in memory (`agents/sql_agent/db.py`), no multi-session support yet.
-  - `agents/sql_agent/sql.py` cleans model output before anything touches the database: extract from fences → sanitize unicode → format via sqlparse → extract statement (rejects multi-statement output, doesn't just truncate to the first) → transpile via sqlglot for the target dialect → sanitize again → block destructive keywords (word-boundary match + a SELECT/WITH allow-list, not naive substring matching).
+  - `agents/sql_agent/sql.py` cleans model output before anything touches the database: extract from fences → sanitize unicode → format via sqlparse → extract statement (rejects multi-statement output, doesn't just truncate to the first) → transpile via sqlglot for the target dialect (pretty-printed, not squashed to one line) → sanitize again → block destructive keywords (word-boundary match + a SELECT/WITH allow-list, not naive substring matching).
   - `agents/sql_agent/agents.py` is an internal subgraph: generate → execute → (on error) fix → execute, up to 3 fix attempts, then synthesize in a business-analyst tone (one-liner for a single value, table + a called-out insight otherwise) or give up gracefully.
-  - Every step logs its own latency (`Routing decision`, `SQL generation`, `SQL execution`, `SQL fix attempt`, `Response synthesis`, `Total query completion`, matching the `<label> took X.XXs` format).
-  - `run_query` sets a 10s statement timeout (Postgres `statement_timeout` / MySQL `MAX_EXECUTION_TIME`) before running anything — a safety net now that this runs against real infrastructure, not just stubs.
-  - **Tested live against a real production database** (read-only credentials) — a single-value question and a multi-CTE failure-rate-by-station question both succeeded on the first attempt, no fix-loop needed. `/connect`'s schema introspection took ~70s over that link — noted, not yet optimized.
+  - Every step logs its own latency (`Routing decision`, `SQL generation`, `SQL execution`, `SQL fix attempt`, `Response synthesis`, `Total query completion`) plus the actual content at each stage (`Generated SQL query`, `Formatted Fixed SQL query`, `Extracted SQL query`, `Transformed SQL query SQLglot`, `Final answer`) — all multi-line/pretty, matching the reference log format.
+  - `run_query` sets a 10s statement timeout (Postgres `statement_timeout` / MySQL `MAX_EXECUTION_TIME`) before running anything.
+  - **Tested live against a real production database** (read-only credentials) — a single-value question and a multi-CTE failure-rate-by-station question both succeeded on the first attempt, no fix-loop needed.
+- [x] Saved, switchable DB connections — no longer just one in-memory connection:
+  - Credentials persist in their own dedicated Postgres (a separate local `nl2sql_meta_db` container/database, not the target DB, not SQLite) via `app/agents/sql_agent/db.py`'s `saved_connections` table, encrypted at rest (`app/core/crypto.py`, Fernet — key from `CREDENTIALS_ENCRYPTION_KEY` in `.env`). `METADATA_DATABASE_URL` in `.env` points at this metadata store.
+  - `app/router/connections.py`: `POST /connections` (save+test+activate — structured host/port/user/password/dbname **or** a raw `url`), `GET /connections` (list, no secrets returned), `POST /connections/{id}/activate` (switch), `DELETE /connections/{id}`.
+  - Still single-active-connection at a time (not per-session) — this is a switchable toggle, not concurrent multi-tenancy.
+  - Found and fixed two real bugs during testing: (1) SQLAlchemy's `str(url)` masks the password as `***` — needed `render_as_string(hide_password=False)` instead, or the raw-`url` path would silently connect with a literal `***` password; (2) saving a duplicate connection name 500'd with a raw `IntegrityError` traceback — now a clean error message.
 - [ ] `knowledge_agent` for real — Tavily + optional DB access. **Next up.**
 - [ ] `python_agent` for real — matplotlib chart generation.
 
@@ -128,10 +132,12 @@ backend/
     ├── core/
     │   ├── config.py           # settings/env
     │   ├── llm.py               # Groq client factory, one model per agent
-    │   ├── logging.py           # one logger setup, used everywhere
-    │   └── exceptions.py        # exception hierarchy + FastAPI error handlers
+    │   ├── logging.py           # one logger setup, used everywhere, + log_duration() timing helper
+    │   ├── exceptions.py        # exception hierarchy + FastAPI error handlers
+    │   └── crypto.py            # Fernet encrypt/decrypt for saved DB credentials
     ├── router/
-    │   └── chat.py               # POST /chat
+    │   ├── chat.py               # POST /chat
+    │   └── connections.py        # POST/GET /connections, activate, delete
     ├── prompts/
     │   ├── main_agent.py
     │   └── sql_agent.py          # generation / fix / synthesizer prompts, one file
