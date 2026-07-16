@@ -11,6 +11,7 @@ class SQLAgentState(TypedDict):
     cleaned_sql: Optional[str]
     rows: Optional[list[dict]]
     error: Optional[str]
+    blocked_reason: Optional[str]
     fix_attempts: int
 
     result: Optional[str]

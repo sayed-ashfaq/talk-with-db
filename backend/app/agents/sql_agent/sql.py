@@ -6,7 +6,7 @@ import sqlglot
 import sqlparse
 
 from app.agents.sql_agent import db
-from app.core.exceptions import UnsafeSQLError
+from app.core.exceptions import DestructiveSQLError, UnsafeSQLError
 
 _FENCE_RE = re.compile(r"```(?:sql)?\s*(.*?)```", re.IGNORECASE | re.DOTALL)
 
@@ -65,9 +65,10 @@ def transpile(sql: str, dialect: str) -> str:
 
 def enforce_read_only(sql: str) -> None:
     if not _ALLOWED_START_RE.match(sql):
-        raise UnsafeSQLError("only SELECT/WITH statements are allowed")
-    if _FORBIDDEN_RE.search(sql):
-        raise UnsafeSQLError("query contains a blocked write/destructive keyword")
+        raise DestructiveSQLError("only SELECT/WITH statements are allowed")
+    match = _FORBIDDEN_RE.search(sql)
+    if match:
+        raise DestructiveSQLError(f"query contains a blocked write/destructive keyword: {match.group(1).upper()}")
 
 
 def clean_sql(llm_output: str, dialect: str) -> str:

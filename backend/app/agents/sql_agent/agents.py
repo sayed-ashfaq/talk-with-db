@@ -6,7 +6,7 @@ from langgraph.graph import END, START, StateGraph
 from app.agents.main_agent.state import AgentState
 from app.agents.sql_agent import db, sql
 from app.agents.sql_agent.state import SQLAgentState
-from app.core.exceptions import NL2SQLError
+from app.core.exceptions import DestructiveSQLError, NL2SQLError
 from app.core.llm import get_llm
 from app.core.logging import get_logger, log_duration
 from app.prompts.sql_agent import FIXER_PROMPT, GENERATION_PROMPT, SYNTHESIZER_PROMPT
@@ -28,7 +28,10 @@ def execute_node(state: SQLAgentState) -> dict:
         with log_duration("SQL execution"):
             cleaned, rows = sql.clean_and_execute(state["sql_draft"], state["db_type"])
         logger.info("executed SQL: %s", cleaned)
-        return {"cleaned_sql": cleaned, "rows": rows, "error": None}
+        return {"cleaned_sql": cleaned, "rows": rows, "error": None, "blocked_reason": None}
+    except DestructiveSQLError as exc:
+        logger.info("blocked a write/destructive query attempt: %s", exc)
+        return {"blocked_reason": str(exc), "error": None}
     except NL2SQLError as exc:
         logger.info("SQL attempt failed: %s", exc)
         return {"error": str(exc)}
@@ -55,7 +58,15 @@ def route_after_execute(state: SQLAgentState) -> Literal["synthesize", "fix", "g
 
 
 def synthesize_node(state: SQLAgentState) -> dict:
-    context = f"Question: {state['refined_query']}\n\nSQL used: {state['cleaned_sql']}\n\nResult rows: {state['rows']}"
+    if state.get("blocked_reason"):
+        context = (
+            f"Question: {state['refined_query']}\n\n"
+            f"This request would require modifying the database rather than just reading from "
+            f"it ({state['blocked_reason']}), which is not permitted. Explain this limitation to "
+            f"the user."
+        )
+    else:
+        context = f"Question: {state['refined_query']}\n\nSQL used: {state['cleaned_sql']}\n\nResult rows: {state['rows']}"
     with log_duration("Response synthesis"):
         response = get_llm("sql_agent").invoke([SystemMessage(content=SYNTHESIZER_PROMPT), HumanMessage(content=context)])
     return {"result": response.content}
@@ -107,6 +118,7 @@ def sql_agent_node(state: AgentState) -> dict:
                 "cleaned_sql": None,
                 "rows": None,
                 "error": None,
+                "blocked_reason": None,
                 "fix_attempts": 0,
                 "result": None,
             }
