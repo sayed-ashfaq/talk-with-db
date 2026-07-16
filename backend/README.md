@@ -10,6 +10,7 @@ We're designing this piece by piece — agree on a step, build it, test it, then
 
 - [x] Main agent (supervisor) — routes each message to `sql_agent`, `knowledge_agent`, `python_agent`, or answers directly. Built as a LangGraph graph, exposed via `POST /chat`. Tested against all four routes.
 - [x] `sql_agent`, `knowledge_agent`, `python_agent` exist as **buffer/stub nodes** — wired into the graph so routing is provable end-to-end, but they don't do real work yet.
+- [x] Folder structure matches the agreed layout below (`core/`, one-folder-per-agent). Minimal logging (`app/core/logging.py`) and a base exception class (`app/core/exceptions.py`, `NL2SQLError`) are wired in — `main.py` has a handler for it, `chat.py` logs each request's message and route. More exceptions get added as each agent actually needs them, not ahead of time.
 - [ ] `sql_agent` for real — schema introspection + SQL generation + safe execution. **Next up.**
 - [ ] `knowledge_agent` for real — Tavily + optional DB access.
 - [ ] `python_agent` for real — matplotlib chart generation.
@@ -108,4 +109,44 @@ The main agent is a **supervisor** over specialist sub-agents, not a single fixe
 
 More specialists (e.g. a research agent) can be added later as additional routes without changing this shape. The "pipeline" diagram above describes what happens *inside* `sql_agent` once it's built for real — that's still the plan for that node specifically.
 
-Folder structure for `app/` (router, agents, prompts, etc.) — to be finalized in a follow-up pass.
+## Project layout
+
+```
+backend/
+└── app/
+    ├── core/
+    │   ├── config.py           # settings/env
+    │   ├── llm.py               # Groq client factory, one model per agent
+    │   ├── logging.py           # one logger setup, used everywhere
+    │   └── exceptions.py        # exception hierarchy + FastAPI error handlers
+    ├── router/
+    │   └── chat.py               # POST /chat
+    ├── prompts/
+    │   ├── main_agent.py
+    │   └── sql_agent.py          # generation / fix / synthesizer prompts, one file
+    └── agents/
+        ├── main_agent/
+        │   ├── __init__.py
+        │   ├── state.py           # top-level graph state (messages, next) — shared across all agents
+        │   └── main.py             # supervisor + direct-answer nodes, AND connects sql_agent/knowledge_agent/python_agent into one graph
+        ├── sql_agent/
+        │   ├── __init__.py
+        │   ├── state.py            # sql_agent's own internal state — attempt count, generated_sql, last error, etc.
+        │   ├── agents.py            # generate → fix (x3) → synthesize, merged, incl. the retry loop
+        │   ├── db.py                # credentials, connection, schema introspection, run_query()
+        │   └── sql.py               # clean generated SQL, safety check, call db.run_query(), shape for synthesizer
+        ├── knowledge_agent/
+        │   ├── __init__.py
+        │   └── agent.py             # stub node — folder now for consistency, minimal content until built for real
+        └── python_agent/
+            ├── __init__.py
+            └── agent.py             # stub node, same story
+```
+
+Notes:
+- **One agent = one folder.** Each agent owns its own state — nothing about sql_agent's retry loop leaks into the shared top-level state, and vice versa.
+- **`main_agent` is the connector.** `main_agent/main.py` is the one place that imports the other agents' node functions and wires the full graph together — the "main.py for agents." It also holds the router (LLM picks a route) and the direct-answer node (chit-chat, no specialist needed).
+- **Single DB connection for now**, not multi-session — `sql_agent/db.py` holds simple state, not a per-user registry.
+- **`db.py` vs `sql.py`:** `db.py` is the generic DB toolkit (connect, introspect schema, run a query, return rows). `sql.py` is the NL2SQL-specific orchestration around a generated query (clean it, safety-check it, call `db.py`, shape the result for the synthesizer). Avoids duplicating execution logic.
+
+Frontend requirements (simple React + JS UI — chat, SQL toggle, charts) are tracked separately in `frontend/REQUIREMENTS.md`.

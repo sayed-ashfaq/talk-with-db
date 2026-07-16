@@ -1,6 +1,6 @@
 from langchain_core.messages import AIMessage
 
-from app.agents.state import AgentState
+from app.agents.main_agent.state import AgentState
 
 
 def sql_agent_node(state: AgentState) -> dict:

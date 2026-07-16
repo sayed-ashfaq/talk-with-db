@@ -1,6 +1,6 @@
 from langchain_groq import ChatGroq
 
-from app.config import settings
+from app.core.config import settings
 
 _AGENT_MODELS = {
     "main_agent": settings.main_agent_model,
