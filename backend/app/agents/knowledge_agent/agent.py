@@ -1,14 +1,10 @@
-from langchain_core.messages import AIMessage
-
 from app.agents.main_agent.state import AgentState
 
 
 def knowledge_agent_node(state: AgentState) -> dict:
     return {
-        "messages": [
-            AIMessage(
-                content="[knowledge_agent] not wired up yet — this will search the web "
-                "(Tavily) and any provided database for context."
-            )
-        ]
+        "agent_output": (
+            f"[knowledge_agent] not wired up yet — this will search the web (Tavily) and any "
+            f"provided database for context. Refined query was: {state['refined_query']}"
+        )
     }
