@@ -1,3 +1,4 @@
+import logging
 from typing import Literal
 
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage
@@ -65,6 +66,7 @@ def responder_node(state: AgentState) -> dict:
 
 
 def finalize_node(state: AgentState) -> dict:
+    logging.info("Final answer: %s", state["final_answer"])
     return {"chat_history": [HumanMessage(content=state["question"]), AIMessage(content=state["final_answer"])]}
 
 

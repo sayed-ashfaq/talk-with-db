@@ -1,3 +1,4 @@
+import logging
 import re
 import unicodedata
 
@@ -54,7 +55,7 @@ def extract_statement(sql: str) -> str:
 
 def transpile(sql: str, dialect: str) -> str:
     try:
-        result = sqlglot.transpile(sql, read=dialect, write=dialect)
+        result = sqlglot.transpile(sql, read=dialect, write=dialect, pretty=True)
     except Exception as exc:
         raise UnsafeSQLError(f"sqlglot could not parse the generated SQL: {exc}") from exc
     if not result:
@@ -71,10 +72,18 @@ def enforce_read_only(sql: str) -> None:
 
 def clean_sql(llm_output: str, dialect: str) -> str:
     sql = extract_sql(llm_output)
+    logging.info("Generated SQL query: \n%s", sql)
+
     sql = sanitize(sql)
     sql = format_sql(sql)
+    logging.info("Formatted Fixed SQL query: \n%s", sql)
+
     sql = extract_statement(sql)
+    logging.info("Extracted SQL query: \n%s", sql)
+
     sql = transpile(sql, dialect)
+    logging.info("Transformed SQL query SQLglot: \n%s", sql)
+
     sql = sanitize(sql)
     enforce_read_only(sql)
     return sql

@@ -17,10 +17,15 @@ We're designing this piece by piece — agree on a step, build it, test it, then
   - `supervisor_node` is one recurring node, called again after every specialist responds: it decides which specialist to use (or that no specialist is needed), refines the query for it (resolving pronouns/context via `chat_history`), and — once a specialist has answered — judges whether that answer actually resolves the question. If yes, it's returned as-is; if no, it re-routes (same or a different specialist) up to `MAX_ATTEMPTS` (3), then gives up gracefully with the last response.
   - `chat_history` persistence is **stateless**: the server doesn't keep sessions. `POST /chat` accepts an optional `history` array and returns the updated one; the caller resends it next turn. (Revisit a server-side session/checkpointer later if this gets unwieldy.)
   - Tested live: direct chit-chat, a DB-shaped question looping against the `sql_agent` stub, and a two-turn conversation where "how many rows does **it** have?" correctly resolved to the `orders` table mentioned in the prior turn.
-- [ ] `sql_agent` for real — schema introspection + SQL generation + safe execution. **Next up.**
-- [ ] `knowledge_agent` for real — Tavily + optional DB access.
+- [x] `sql_agent` is real:
+  - `POST /connect` (`app/router/connection.py`) takes db_type/host/port/user/password/dbname, tests the connection, and caches the schema — single active connection in memory (`agents/sql_agent/db.py`), no multi-session support yet.
+  - `agents/sql_agent/sql.py` cleans model output before anything touches the database: extract from fences → sanitize unicode → format via sqlparse → extract statement (rejects multi-statement output, doesn't just truncate to the first) → transpile via sqlglot for the target dialect → sanitize again → block destructive keywords (word-boundary match + a SELECT/WITH allow-list, not naive substring matching).
+  - `agents/sql_agent/agents.py` is an internal subgraph: generate → execute → (on error) fix → execute, up to 3 fix attempts, then synthesize in a business-analyst tone (one-liner for a single value, table + a called-out insight otherwise) or give up gracefully.
+  - Every step logs its own latency (`Routing decision`, `SQL generation`, `SQL execution`, `SQL fix attempt`, `Response synthesis`, `Total query completion`, matching the `<label> took X.XXs` format).
+  - `run_query` sets a 10s statement timeout (Postgres `statement_timeout` / MySQL `MAX_EXECUTION_TIME`) before running anything — a safety net now that this runs against real infrastructure, not just stubs.
+  - **Tested live against a real production database** (read-only credentials) — a single-value question and a multi-CTE failure-rate-by-station question both succeeded on the first attempt, no fix-loop needed. `/connect`'s schema introspection took ~70s over that link — noted, not yet optimized.
+- [ ] `knowledge_agent` for real — Tavily + optional DB access. **Next up.**
 - [ ] `python_agent` for real — matplotlib chart generation.
-- [ ] Synthesizer step and final-answer guardrail (currently only exist on paper in the pipeline diagram below).
 
 ## The pipeline
 
