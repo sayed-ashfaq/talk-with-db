@@ -5,7 +5,7 @@ from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from pydantic import BaseModel
 
 from app.agents.main_agent.main import graph
-from app.core.logging import get_logger
+from app.core.logging import get_logger, log_duration
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -45,17 +45,18 @@ def _to_chat_messages(lc_messages: list[AnyMessage]) -> list[ChatMessage]:
 def chat(request: ChatRequest) -> ChatResponse:
     logger.info("received message: %s", request.message)
 
-    result = graph.invoke(
-        {
-            "chat_history": _to_lc_messages(request.history),
-            "question": request.message,
-            "refined_query": "",
-            "next": "",
-            "agent_output": None,
-            "attempts": 0,
-            "final_answer": None,
-        }
-    )
+    with log_duration("Total query completion"):
+        result = graph.invoke(
+            {
+                "chat_history": _to_lc_messages(request.history),
+                "question": request.message,
+                "refined_query": "",
+                "next": "",
+                "agent_output": None,
+                "attempts": 0,
+                "final_answer": None,
+            }
+        )
 
     routed_to = result.get("next") or "respond"
     logger.info("routed_to=%s", routed_to)

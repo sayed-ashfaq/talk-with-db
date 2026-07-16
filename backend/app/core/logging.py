@@ -1,6 +1,8 @@
 import logging
 import os
 import sys
+import time
+from contextlib import contextmanager
 from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
 
@@ -51,3 +53,13 @@ def setup_logging(log_level: int = logging.INFO) -> logging.Logger:
 
 def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)
+
+
+@contextmanager
+def log_duration(label: str):
+    start = time.perf_counter()
+    try:
+        yield
+    finally:
+        elapsed = time.perf_counter() - start
+        logging.info("%s took %.2fs", label, elapsed)

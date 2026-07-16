@@ -8,8 +8,9 @@ from pydantic import BaseModel
 from app.agents.knowledge_agent.agent import knowledge_agent_node
 from app.agents.main_agent.state import AgentState
 from app.agents.python_agent.agent import python_agent_node
-from app.agents.sql_agent.agent import sql_agent_node
+from app.agents.sql_agent.agents import sql_agent_node
 from app.core.llm import get_llm
+from app.core.logging import log_duration
 from app.prompts.main_agent import RESPOND_PROMPT, SYSTEM_PROMPT
 
 MAX_ATTEMPTS = 3
@@ -39,7 +40,8 @@ def supervisor_node(
     if attempted and state.get("attempts", 0) >= MAX_ATTEMPTS:
         return Command(goto="finalize", update={"final_answer": state["agent_output"]})
 
-    decision = get_llm("main_agent").with_structured_output(Decision).invoke(_decision_context(state))
+    with log_duration("Routing decision"):
+        decision = get_llm("main_agent").with_structured_output(Decision).invoke(_decision_context(state))
 
     if attempted and decision.resolved:
         return Command(goto="finalize", update={"final_answer": state["agent_output"]})
@@ -57,7 +59,8 @@ def supervisor_node(
 
 def responder_node(state: AgentState) -> dict:
     llm = get_llm("main_agent")
-    response = llm.invoke([SystemMessage(content=RESPOND_PROMPT), *state["chat_history"], HumanMessage(content=state["question"])])
+    with log_duration("Direct response"):
+        response = llm.invoke([SystemMessage(content=RESPOND_PROMPT), *state["chat_history"], HumanMessage(content=state["question"])])
     return {"final_answer": response.content}
 
 
