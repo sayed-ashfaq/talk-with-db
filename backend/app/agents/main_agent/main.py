@@ -20,7 +20,7 @@ ROUTES = Literal["sql_agent", "knowledge_agent", "python_agent", "respond"]
 
 
 class Decision(BaseModel):
-    resolved: bool
+    resolved: Literal["yes", "no"]
     next: ROUTES
     refined_query: str
     reasoning: str
@@ -44,7 +44,7 @@ def supervisor_node(
     with log_duration("Routing decision"):
         decision = get_llm("main_agent").with_structured_output(Decision).invoke(_decision_context(state))
 
-    if attempted and decision.resolved:
+    if attempted and decision.resolved == "yes":
         return Command(goto="finalize", update={"final_answer": state["agent_output"]})
 
     goto = "responder" if decision.next == "respond" else decision.next

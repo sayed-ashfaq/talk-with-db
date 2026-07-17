@@ -177,10 +177,17 @@ def _introspect(engine: Engine) -> tuple[str, dict[str, list[str]]]:
     tables: dict[str, list[str]] = {}
     blocks: list[str] = []
 
-    for table_name in inspector.get_table_names():
-        columns = inspector.get_columns(table_name)
-        pk_columns = set(inspector.get_pk_constraint(table_name).get("constrained_columns") or [])
-        foreign_keys = inspector.get_foreign_keys(table_name)
+    # bulk reflection: a handful of queries total, not 3-4 per table — matters a lot over a
+    # high-latency link, where the old per-table loop meant dozens of extra round trips
+    all_columns = inspector.get_multi_columns()
+    all_pks = inspector.get_multi_pk_constraint()
+    all_fks = inspector.get_multi_foreign_keys()
+
+    for table_key in sorted(all_columns, key=lambda k: k[1]):
+        table_name = table_key[1]
+        columns = all_columns[table_key]
+        pk_columns = set(all_pks.get(table_key, {}).get("constrained_columns") or [])
+        foreign_keys = all_fks.get(table_key, [])
 
         lines = [f"Table {table_name}:"]
         for col in columns:

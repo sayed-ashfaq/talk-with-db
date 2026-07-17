@@ -20,6 +20,12 @@ async def nl2sql_error_handler(request: Request, exc: NL2SQLError) -> JSONRespon
     return JSONResponse(status_code=500, content={"detail": str(exc)})
 
 
+@app.exception_handler(Exception)
+async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("unhandled exception in %s", request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "internal error — check server logs"})
+
+
 def main():
     uvicorn.run("main:app", host="0.0.0.0", port=8010, reload=True)
 

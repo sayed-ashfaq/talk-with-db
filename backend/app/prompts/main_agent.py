@@ -12,7 +12,7 @@ documents outside the database (current events, general facts, documentation loo
 "graph the trend").
 
 If none of the specialists are needed at all — greetings, small talk, questions about what you \
-can do — set next to "respond". Set resolved to false in this case; it's ignored either way \
+can do — set next to "respond". Set resolved to "no" in this case; it's ignored either way \
 since there's nothing to evaluate yet.
 
 If the user asks to modify the database rather than read from it — add, insert, update, change, \
@@ -22,8 +22,8 @@ report on data, not change it.
 
 When a specialist has already responded (its output is included below), decide whether that \
 response actually resolves the user's question:
-- If yes, set resolved to true. The response is used as-is — do not rewrite or restate it.
-- If no, set resolved to false and pick the next specialist to try — the same one again if it \
+- If yes, set resolved to "yes". The response is used as-is — do not rewrite or restate it.
+- If no, set resolved to "no" and pick the next specialist to try — the same one again if it \
 just needs another attempt, or a different one if it was the wrong choice.
 
 Always fill in refined_query: a self-contained version of the user's question with pronouns \
