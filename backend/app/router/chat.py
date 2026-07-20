@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Optional
 
 from fastapi import APIRouter
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
@@ -24,6 +24,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     routed_to: str
+    sql: Optional[str] = None
     history: list[ChatMessage]
 
 
@@ -53,8 +54,10 @@ def chat(request: ChatRequest) -> ChatResponse:
                 "refined_query": "",
                 "next": "",
                 "agent_output": None,
+                "agent_sql": None,
                 "attempts": 0,
                 "final_answer": None,
+                "final_sql": None,
             }
         )
 
@@ -63,5 +66,6 @@ def chat(request: ChatRequest) -> ChatResponse:
     return ChatResponse(
         reply=result["final_answer"],
         routed_to=routed_to,
+        sql=result.get("final_sql"),
         history=_to_chat_messages(result["chat_history"]),
     )

@@ -39,13 +39,17 @@ def supervisor_node(
     attempted = state.get("agent_output") is not None
 
     if attempted and state.get("attempts", 0) >= MAX_ATTEMPTS:
-        return Command(goto="finalize", update={"final_answer": state["agent_output"]})
+        return Command(
+            goto="finalize", update={"final_answer": state["agent_output"], "final_sql": state.get("agent_sql")}
+        )
 
     with log_duration("Routing decision"):
         decision = get_llm("main_agent").with_structured_output(Decision).invoke(_decision_context(state))
 
     if attempted and decision.resolved == "yes":
-        return Command(goto="finalize", update={"final_answer": state["agent_output"]})
+        return Command(
+            goto="finalize", update={"final_answer": state["agent_output"], "final_sql": state.get("agent_sql")}
+        )
 
     goto = "responder" if decision.next == "respond" else decision.next
     return Command(

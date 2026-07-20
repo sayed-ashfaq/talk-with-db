@@ -123,4 +123,4 @@ def sql_agent_node(state: AgentState) -> dict:
                 "result": None,
             }
         )
-    return {"agent_output": result["result"]}
+    return {"agent_output": result["result"], "agent_sql": result.get("cleaned_sql")}

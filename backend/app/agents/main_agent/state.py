@@ -11,6 +11,8 @@ class AgentState(TypedDict):
     refined_query: str
     next: str
     agent_output: Optional[str]
+    agent_sql: Optional[str]
     attempts: int
 
     final_answer: Optional[str]
+    final_sql: Optional[str]
