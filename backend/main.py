@@ -13,10 +13,12 @@ logger = get_logger(__name__)
 
 app = FastAPI(title="NL2SQL")
 
-# local dev frontend (Vite) — tighten this to a real origin allowlist before deploying
+# local dev frontend (Vite) — a regex, not a fixed port, because Vite silently moves to the next
+# free port (5174, 5175, ...) if 5173 is already taken by another instance. Tighten this to a
+# real origin allowlist before deploying.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_methods=["*"],
     allow_headers=["*"],
 )

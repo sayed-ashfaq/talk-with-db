@@ -4,6 +4,11 @@ import Modal from "../common/Modal";
 import * as api from "../../api/client";
 import styles from "./SchemaGraphModal.module.css";
 
+const DEFAULT_GROUP = "__default__";
+const MIN_NODE_RADIUS = 3;
+const MAX_NODE_RADIUS = 15;
+const CLUSTER_STRENGTH = 0.12;
+
 function readGraphTheme() {
   const cs = getComputedStyle(document.documentElement);
   return {
@@ -11,7 +16,23 @@ function readGraphTheme() {
     nodeSelected: cs.getPropertyValue("--graph-node-selected").trim(),
     link: cs.getPropertyValue("--graph-link").trim(),
     label: cs.getPropertyValue("--graph-label").trim(),
+    schemaPalette: [1, 2, 3, 4].map((i) => cs.getPropertyValue(`--graph-schema-${i}`).trim()),
   };
+}
+
+// area (not radius) scales with the table's share of the largest table's row count — matches
+// how humans perceive circle size, and a flat MIN/MAX keeps tiny/huge tables both legible
+function nodeRadius(rowCount, maxRowCount) {
+  if (!maxRowCount) return MIN_NODE_RADIUS;
+  const ratio = Math.max(rowCount, 0) / maxRowCount;
+  return MIN_NODE_RADIUS + Math.sqrt(ratio) * (MAX_NODE_RADIUS - MIN_NODE_RADIUS);
+}
+
+function formatRowCount(count) {
+  if (!count) return "0 rows";
+  if (count >= 1_000_000) return `~${(count / 1_000_000).toFixed(1)}M rows`;
+  if (count >= 1_000) return `~${(count / 1_000).toFixed(1)}K rows`;
+  return `~${count.toLocaleString()} rows`;
 }
 
 export default function SchemaGraphModal({ onClose }) {
@@ -20,6 +41,8 @@ export default function SchemaGraphModal({ onClose }) {
   const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
   const [selectedNode, setSelectedNode] = useState(null);
+  const [hoveredNode, setHoveredNode] = useState(null);
+  const [pointerPos, setPointerPos] = useState({ x: 0, y: 0 });
   const [graphTheme, setGraphTheme] = useState(readGraphTheme);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
@@ -32,8 +55,15 @@ export default function SchemaGraphModal({ onClose }) {
       .getSchemaGraph()
       .then((data) => {
         if (cancelled) return;
+        const maxRowCount = Math.max(0, ...data.nodes.map((n) => n.row_count || 0));
         setGraphData({
-          nodes: data.nodes.map((n) => ({ id: n.id, columns: n.columns })),
+          nodes: data.nodes.map((n) => ({
+            id: n.id,
+            columns: n.columns,
+            schemaGroup: n.table_schema || DEFAULT_GROUP,
+            rowCount: n.row_count || 0,
+            maxRowCount,
+          })),
           links: data.edges.map((e) => ({
             source: e.from,
             target: e.to,
@@ -68,6 +98,54 @@ export default function SchemaGraphModal({ onClose }) {
     return () => observer.disconnect();
   }, []);
 
+  const schemaGroups = useMemo(() => {
+    if (!graphData) return [];
+    return [...new Set(graphData.nodes.map((n) => n.schemaGroup))].sort((a, b) =>
+      a === DEFAULT_GROUP ? 1 : b === DEFAULT_GROUP ? -1 : a.localeCompare(b),
+    );
+  }, [graphData]);
+
+  // multiple schemas mixed together read as noise — cluster each schema's tables around its own
+  // point on a ring so the layout visually separates them, on top of the normal FK-link forces
+  useEffect(() => {
+    const fg = fgRef.current;
+    if (!fg || !graphData) return;
+    if (schemaGroups.length < 2) {
+      fg.d3Force("cluster", null);
+      return;
+    }
+    const clusterRadius = 90 + schemaGroups.length * 35;
+    const angleStep = (2 * Math.PI) / schemaGroups.length;
+    const centroids = new Map(
+      schemaGroups.map((group, i) => [
+        group,
+        { x: Math.cos(i * angleStep) * clusterRadius, y: Math.sin(i * angleStep) * clusterRadius },
+      ]),
+    );
+    fg.d3Force("cluster", (alpha) => {
+      for (const node of graphData.nodes) {
+        const centroid = centroids.get(node.schemaGroup);
+        node.vx -= (node.x - centroid.x) * CLUSTER_STRENGTH * alpha;
+        node.vy -= (node.y - centroid.y) * CLUSTER_STRENGTH * alpha;
+      }
+    });
+    fg.d3ReheatSimulation();
+  }, [graphData, schemaGroups]);
+
+  const schemaColor = useMemo(() => {
+    const map = new Map();
+    // a single schema (or no schema concept, e.g. mysql) isn't a "category" worth coloring —
+    // only break out distinct hues once there's actually more than one group to tell apart
+    if (schemaGroups.length < 2) {
+      schemaGroups.forEach((group) => map.set(group, graphTheme.node));
+      return map;
+    }
+    schemaGroups.forEach((group, i) => {
+      map.set(group, i < graphTheme.schemaPalette.length ? graphTheme.schemaPalette[i] : graphTheme.node);
+    });
+    return map;
+  }, [schemaGroups, graphTheme]);
+
   const matchedIds = useMemo(() => {
     if (!graphData || !search.trim()) return null;
     const q = search.trim().toLowerCase();
@@ -82,6 +160,14 @@ export default function SchemaGraphModal({ onClose }) {
     }
   };
 
+  const handlePointerMove = (e) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    setPointerPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+  };
+
+  const showLegend = schemaGroups.length >= 2;
+
   return (
     <Modal title="Schema graph" onClose={onClose} size="large">
       <div className={styles.toolbar}>
@@ -94,13 +180,18 @@ export default function SchemaGraphModal({ onClose }) {
         />
         {graphData && (
           <span className={styles.summary}>
-            {graphData.nodes.length} tables · {graphData.links.length} relationships
+            {graphData.nodes.length} tables · {graphData.links.length} relationships · node size ≈ row count
           </span>
         )}
       </div>
 
       <div className={styles.body}>
-        <div className={styles.canvas} ref={containerRef}>
+        <div
+          className={styles.canvas}
+          ref={containerRef}
+          onMouseMove={handlePointerMove}
+          onMouseLeave={() => setHoveredNode(null)}
+        >
           {isLoading && <p className={styles.status}>Loading schema…</p>}
           {error && <p className={styles.statusError}>{error}</p>}
           {graphData && !error && (
@@ -110,34 +201,83 @@ export default function SchemaGraphModal({ onClose }) {
               height={dimensions.height}
               graphData={graphData}
               nodeId="id"
-              nodeLabel={(n) => n.id}
               nodeRelSize={4}
               linkDirectionalArrowLength={4}
               linkDirectionalArrowRelPos={1}
               linkColor={() => graphTheme.link}
               linkWidth={1}
               onNodeClick={handleNodeClick}
+              onNodeHover={setHoveredNode}
               onBackgroundClick={() => setSelectedNode(null)}
+              nodePointerAreaPaint={(node, color, ctx) => {
+                const r = nodeRadius(node.rowCount, node.maxRowCount);
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
+                ctx.fill();
+              }}
               nodeCanvasObject={(node, ctx, globalScale) => {
                 const isMatch = !matchedIds || matchedIds.has(node.id);
                 const isSelected = selectedNode?.id === node.id;
+                const isHovered = hoveredNode?.id === node.id;
                 const label = node.id.split(".").pop();
                 const fontSize = 12 / globalScale;
+                const r = nodeRadius(node.rowCount, node.maxRowCount);
 
                 ctx.globalAlpha = isMatch ? 1 : 0.15;
                 ctx.beginPath();
-                ctx.arc(node.x, node.y, isSelected ? 6 : 4, 0, 2 * Math.PI);
-                ctx.fillStyle = isSelected ? graphTheme.nodeSelected : graphTheme.node;
+                ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
+                ctx.fillStyle = isSelected ? graphTheme.nodeSelected : schemaColor.get(node.schemaGroup) ?? graphTheme.node;
                 ctx.fill();
+                if (isHovered || isSelected) {
+                  ctx.lineWidth = 1.5 / globalScale;
+                  ctx.strokeStyle = graphTheme.nodeSelected;
+                  ctx.stroke();
+                }
 
                 ctx.font = `${fontSize}px -apple-system, sans-serif`;
                 ctx.textAlign = "center";
                 ctx.textBaseline = "top";
                 ctx.fillStyle = graphTheme.label;
-                ctx.fillText(label, node.x, node.y + 6);
+                ctx.fillText(label, node.x, node.y + r + 2);
                 ctx.globalAlpha = 1;
               }}
             />
+          )}
+
+          {showLegend && (
+            <div className={styles.legend}>
+              {schemaGroups.map((group) => (
+                <div key={group} className={styles.legendItem}>
+                  <span className={styles.legendDot} style={{ background: schemaColor.get(group) }} />
+                  {group === DEFAULT_GROUP ? "other" : group}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {hoveredNode && (
+            <div
+              className={styles.tooltip}
+              style={{ left: pointerPos.x + 16, top: pointerPos.y + 16 }}
+            >
+              <div className={styles.tooltipTitle}>{hoveredNode.id}</div>
+              <div className={styles.tooltipMeta}>{formatRowCount(hoveredNode.rowCount)}</div>
+              <ul className={styles.tooltipColumns}>
+                {hoveredNode.columns.slice(0, 10).map((c) => (
+                  <li key={c.name}>
+                    <span>
+                      {c.name}
+                      {c.pk && <span className={styles.tooltipPk}>PK</span>}
+                    </span>
+                    <span className={styles.tooltipType}>{c.type}</span>
+                  </li>
+                ))}
+              </ul>
+              {hoveredNode.columns.length > 10 && (
+                <div className={styles.tooltipMore}>+{hoveredNode.columns.length - 10} more columns</div>
+              )}
+            </div>
           )}
         </div>
 
@@ -149,6 +289,7 @@ export default function SchemaGraphModal({ onClose }) {
                 ×
               </button>
             </div>
+            <p className={styles.detailsMeta}>{formatRowCount(selectedNode.rowCount)}</p>
             <table className={styles.columnTable}>
               <tbody>
                 {selectedNode.columns.map((c) => (

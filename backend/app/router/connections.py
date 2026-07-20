@@ -115,6 +115,8 @@ class SchemaColumn(BaseModel):
 class SchemaNode(BaseModel):
     id: str
     columns: list[SchemaColumn]
+    table_schema: Optional[str] = None
+    row_count: int = 0
 
 
 class SchemaEdge(BaseModel):
@@ -138,9 +140,15 @@ def get_schema_graph() -> SchemaGraphResponse:
     connection = db.get_active()
     with log_duration("Build schema graph (view)"):
         graph = _get_or_build_graph(connection)
+    row_counts = schema_graph.get_row_counts(connection.engine)
 
     nodes = [
-        SchemaNode(id=name, columns=[SchemaColumn(**c) for c in graph.tables[name].columns])
+        SchemaNode(
+            id=name,
+            columns=[SchemaColumn(**c) for c in graph.tables[name].columns],
+            table_schema=name.rsplit(".", 1)[0] if "." in name else None,
+            row_count=row_counts.get(name, 0),
+        )
         for name in graph.table_names
     ]
 

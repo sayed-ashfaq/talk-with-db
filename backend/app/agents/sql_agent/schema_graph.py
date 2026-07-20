@@ -136,6 +136,42 @@ def build_schema_graph(engine: Engine) -> SchemaGraph:
     return SchemaGraph(graph=graph, tables=tables, table_names=table_names, embeddings=embeddings)
 
 
+# planner statistics, not COUNT(*) — an exact count means a full scan per table, way too slow
+# across a ~70-table schema. reltuples/table_rows are estimates (accurate after ANALYZE /
+# InnoDB's periodic stats refresh), which is precise enough for sizing nodes in the graph view.
+_ROW_COUNT_QUERY = {
+    "postgresql": """
+        SELECT n.nspname AS schema_name, c.relname AS table_name, c.reltuples::bigint AS estimate
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relkind = 'r' AND n.nspname NOT IN ('information_schema', 'pg_toast')
+          AND n.nspname NOT LIKE 'pg\\_%%'
+    """,
+    # mysql's "schema" is the connected database itself — db._qualify(None, table) leaves it
+    # unprefixed, so schema_name is left NULL here to match
+    "mysql": """
+        SELECT NULL AS schema_name, table_name, table_rows AS estimate
+        FROM information_schema.tables
+        WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'
+    """,
+}
+
+
+def get_row_counts(engine: Engine) -> dict[str, int]:
+    """Approximate row count per table, keyed the same way as SchemaGraph.tables (qualified
+    name via db._qualify) so the caller can zip it straight onto graph nodes."""
+    query = _ROW_COUNT_QUERY.get(engine.dialect.name)
+    if query is None:
+        return {}
+    try:
+        with engine.connect() as conn:
+            rows = conn.exec_driver_sql(query).fetchall()
+    except Exception:
+        logger.warning("could not fetch row count estimates", exc_info=True)
+        return {}
+    return {db._qualify(schema_name, table_name): max(int(estimate or 0), 0) for schema_name, table_name, estimate in rows}
+
+
 def render_graph_text(schema: SchemaGraph) -> str:
     """The whole graph as text: every table (node) with its columns, plus every FK edge — the
     graph-shaped counterpart to db.py's flat schema_text, for side-by-side comparison in the UI.
