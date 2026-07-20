@@ -172,35 +172,55 @@ def get_active() -> Connection:
     return _active
 
 
+# schemas whose tables are driver/catalog internals, never user data — always skip these
+_SYSTEM_SCHEMAS = {"information_schema", "pg_toast"}
+
+
+def _schemas_to_introspect(engine: Engine, inspector) -> list[Optional[str]]:
+    # only postgres nests multiple schemas inside one connected database (mysql's "schema" IS the
+    # database, so schema=None already reflects exactly the connected db — no iteration needed)
+    if engine.dialect.name != "postgresql":
+        return [None]
+    schemas = [s for s in inspector.get_schema_names() if s not in _SYSTEM_SCHEMAS and not s.startswith("pg_")]
+    return schemas or [None]
+
+
+def _qualify(schema: Optional[str], table: str) -> str:
+    return f"{schema}.{table}" if schema else table
+
+
 def _introspect(engine: Engine) -> tuple[str, dict[str, list[str]]]:
     inspector = inspect(engine)
     tables: dict[str, list[str]] = {}
-    blocks: list[str] = []
+    entries: dict[str, str] = {}
 
-    # bulk reflection: a handful of queries total, not 3-4 per table — matters a lot over a
-    # high-latency link, where the old per-table loop meant dozens of extra round trips
-    all_columns = inspector.get_multi_columns()
-    all_pks = inspector.get_multi_pk_constraint()
-    all_fks = inspector.get_multi_foreign_keys()
+    for schema in _schemas_to_introspect(engine, inspector):
+        # bulk reflection: a handful of queries total, not 3-4 per table — matters a lot over a
+        # high-latency link, where the old per-table loop meant dozens of extra round trips
+        all_columns = inspector.get_multi_columns(schema=schema)
+        all_pks = inspector.get_multi_pk_constraint(schema=schema)
+        all_fks = inspector.get_multi_foreign_keys(schema=schema)
 
-    for table_key in sorted(all_columns, key=lambda k: k[1]):
-        table_name = table_key[1]
-        columns = all_columns[table_key]
-        pk_columns = set(all_pks.get(table_key, {}).get("constrained_columns") or [])
-        foreign_keys = all_fks.get(table_key, [])
+        for table_key, columns in all_columns.items():
+            schema_name, table_name = table_key
+            qualified_name = _qualify(schema_name, table_name)
+            pk_columns = set(all_pks.get(table_key, {}).get("constrained_columns") or [])
+            foreign_keys = all_fks.get(table_key, [])
 
-        lines = [f"Table {table_name}:"]
-        for col in columns:
-            marker = " PK" if col["name"] in pk_columns else ""
-            lines.append(f"  - {col['name']} ({col['type']}){marker}")
-        for fk in foreign_keys:
-            constrained = ", ".join(fk["constrained_columns"])
-            referred = ", ".join(fk["referred_columns"])
-            lines.append(f"  - FK: {constrained} -> {fk['referred_table']}({referred})")
+            lines = [f"Table {qualified_name}:"]
+            for col in columns:
+                marker = " PK" if col["name"] in pk_columns else ""
+                lines.append(f"  - {col['name']} ({col['type']}){marker}")
+            for fk in foreign_keys:
+                constrained = ", ".join(fk["constrained_columns"])
+                referred = ", ".join(fk["referred_columns"])
+                referred_name = _qualify(fk.get("referred_schema") or schema_name, fk["referred_table"])
+                lines.append(f"  - FK: {constrained} -> {referred_name}({referred})")
 
-        tables[table_name] = [col["name"] for col in columns]
-        blocks.append("\n".join(lines))
+            tables[qualified_name] = [col["name"] for col in columns]
+            entries[qualified_name] = "\n".join(lines)
 
+    blocks = [entries[name] for name in sorted(entries)]
     return "\n\n".join(blocks), tables
 
 

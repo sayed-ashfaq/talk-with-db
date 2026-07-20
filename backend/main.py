@@ -16,7 +16,7 @@ app.include_router(connections_router)
 
 @app.exception_handler(NL2SQLError)
 async def nl2sql_error_handler(request: Request, exc: NL2SQLError) -> JSONResponse:
-    logger.error(str(exc))
+    logger.error(str(exc), exc_info=exc)
     return JSONResponse(status_code=500, content={"detail": str(exc)})
 
 

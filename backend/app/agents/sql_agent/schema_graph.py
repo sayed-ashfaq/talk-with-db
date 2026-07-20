@@ -25,6 +25,7 @@ schema_text, purely for inspection/comparison — it doesn't touch SQL generatio
 
 from dataclasses import dataclass, field
 from itertools import combinations
+from typing import Optional
 
 import networkx as nx
 import numpy as np
@@ -34,6 +35,7 @@ from pydantic import BaseModel
 from sqlalchemy import inspect
 from sqlalchemy.engine import Engine
 
+from app.agents.sql_agent import db
 from app.core.llm import get_llm
 from app.core.logging import get_logger, log_duration
 
@@ -87,37 +89,43 @@ def build_schema_graph(engine: Engine) -> SchemaGraph:
     """Tables -> nodes, FK relationships -> edges. Call once per connection, cache the result."""
     inspector = inspect(engine)
 
-    all_columns = inspector.get_multi_columns()
-    all_pks = inspector.get_multi_pk_constraint()
-    all_fks = inspector.get_multi_foreign_keys()
-
     graph = nx.MultiGraph()
     tables: dict[str, TableInfo] = {}
+    pending_fks: list[tuple[str, dict, Optional[str]]] = []  # (from_table, fk, schema)
 
-    for table_key, columns in all_columns.items():
-        table_name = table_key[1]
-        pk_columns = set(all_pks.get(table_key, {}).get("constrained_columns") or [])
-        cols = [
-            {"name": c["name"], "type": str(c["type"]), "pk": c["name"] in pk_columns} for c in columns
-        ]
-        tables[table_name] = TableInfo(name=table_name, columns=cols)
-        graph.add_node(table_name)
+    for schema in db._schemas_to_introspect(engine, inspector):
+        all_columns = inspector.get_multi_columns(schema=schema)
+        all_pks = inspector.get_multi_pk_constraint(schema=schema)
+        all_fks = inspector.get_multi_foreign_keys(schema=schema)
 
-    for table_key, fks in all_fks.items():
-        from_table = table_key[1]
-        for fk in fks:
-            to_table = fk["referred_table"]
-            if to_table not in tables:
-                continue  # referenced table outside the introspected set (e.g. different schema)
-            for from_col, to_col in zip(fk["constrained_columns"], fk["referred_columns"]):
-                graph.add_edge(
-                    from_table,
-                    to_table,
-                    from_table=from_table,
-                    from_column=from_col,
-                    to_table=to_table,
-                    to_column=to_col,
-                )
+        for table_key, columns in all_columns.items():
+            schema_name, table_name = table_key
+            qualified_name = db._qualify(schema_name, table_name)
+            pk_columns = set(all_pks.get(table_key, {}).get("constrained_columns") or [])
+            cols = [
+                {"name": c["name"], "type": str(c["type"]), "pk": c["name"] in pk_columns} for c in columns
+            ]
+            tables[qualified_name] = TableInfo(name=qualified_name, columns=cols)
+            graph.add_node(qualified_name)
+
+        for table_key, fks in all_fks.items():
+            from_table = db._qualify(table_key[0], table_key[1])
+            for fk in fks:
+                pending_fks.append((from_table, fk, schema))
+
+    for from_table, fk, schema in pending_fks:
+        to_table = db._qualify(fk.get("referred_schema") or schema, fk["referred_table"])
+        if to_table not in tables:
+            continue  # referenced table outside the introspected set
+        for from_col, to_col in zip(fk["constrained_columns"], fk["referred_columns"]):
+            graph.add_edge(
+                from_table,
+                to_table,
+                from_table=from_table,
+                from_column=from_col,
+                to_table=to_table,
+                to_column=to_col,
+            )
 
     table_names = sorted(tables)
     descriptions = [f"{name}: {', '.join(c['name'] for c in tables[name].columns)}" for name in table_names]

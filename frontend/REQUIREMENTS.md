@@ -54,3 +54,9 @@ Don't hardcode assumptions beyond what's listed here — confirm the exact `char
 - No auth/login
 - No multi-conversation history or persistence beyond what `/chat`'s `history` round-trip gives you (client holds it, not the server)
 - No concurrent/per-user active connections — activating a connection changes it for everyone hitting this backend, it's not scoped per browser session
+
+
+## Graph nodes
+
+
+## showing sql
