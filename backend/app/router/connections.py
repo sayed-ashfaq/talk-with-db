@@ -1,7 +1,7 @@
 from typing import Literal, Optional
 
 from fastapi import APIRouter
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from app.agents.sql_agent import db, schema_graph
 from app.core.logging import get_logger, log_duration
@@ -104,3 +104,62 @@ def get_schema(schema_type: Literal["plain", "graph"] = "plain") -> SchemaRespon
             graph = _get_or_build_graph(connection)
         text = schema_graph.render_graph_text(graph)
     return SchemaResponse(schema_type=schema_type, schema_text=text)
+
+
+class SchemaColumn(BaseModel):
+    name: str
+    type: str
+    pk: bool
+
+
+class SchemaNode(BaseModel):
+    id: str
+    columns: list[SchemaColumn]
+
+
+class SchemaEdge(BaseModel):
+    from_: str = Field(alias="from")
+    from_column: str
+    to: str
+    to_column: str
+
+    model_config = {"populate_by_name": True}
+
+
+class SchemaGraphResponse(BaseModel):
+    nodes: list[SchemaNode]
+    edges: list[SchemaEdge]
+
+
+@router.get("/connections/schema-graph", response_model=SchemaGraphResponse, response_model_by_alias=True)
+def get_schema_graph() -> SchemaGraphResponse:
+    """Structured node-link data for the frontend's schema graph view — same SchemaGraph object
+    render_graph_text() flattens to text, just shaped as JSON instead."""
+    connection = db.get_active()
+    with log_duration("Build schema graph (view)"):
+        graph = _get_or_build_graph(connection)
+
+    nodes = [
+        SchemaNode(id=name, columns=[SchemaColumn(**c) for c in graph.tables[name].columns])
+        for name in graph.table_names
+    ]
+
+    seen = set()
+    edges = []
+    for _, _, data in graph.graph.edges(data=True):
+        key = (data["from_table"], data["from_column"], data["to_table"], data["to_column"])
+        if key in seen:
+            continue
+        seen.add(key)
+        edges.append(
+            SchemaEdge(
+                **{
+                    "from": data["from_table"],
+                    "from_column": data["from_column"],
+                    "to": data["to_table"],
+                    "to_column": data["to_column"],
+                }
+            )
+        )
+
+    return SchemaGraphResponse(nodes=nodes, edges=edges)

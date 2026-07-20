@@ -48,6 +48,12 @@ def setup_logging(log_level: int = logging.INFO) -> logging.Logger:
     file_handler.setFormatter(formatter)
     root.addHandler(file_handler)
 
+    # uvicorn --reload's watchfiles logs "N changes detected" at INFO for every filesystem event
+    # it sees, including writes to this file handler's own log file inside the watched directory
+    # — left at INFO that's a self-sustaining feedback loop (log write -> detected change -> log
+    # write -> ...) that fills the log file forever without ever actually triggering a reload.
+    logging.getLogger("watchfiles").setLevel(logging.WARNING)
+
     return root
 
 
