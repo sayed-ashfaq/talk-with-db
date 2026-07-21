@@ -13,6 +13,10 @@ schema — no INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, TRUNCATE, EXEC.
 - Use {db_type}-specific syntax and functions — date/time handling, quoting, LIMIT/OFFSET and \
 similar differ between Postgres and MySQL, so write for {db_type} specifically.
 - Prefer explicit column names over SELECT *.
+- Unless the question already returns a single row (a COUNT/SUM/AVG/aggregate with no GROUP BY, \
+or the user asked for a specific number of rows), cap the result set with a {db_type} LIMIT \
+clause of fewer than 15 rows — fetch only what's needed to answer the question, not every \
+matching row.
 - Return ONLY the SQL, inside a single ```sql fenced code block. No commentary before or after."""
 
 # =====================================FIXER PROMPT=====================================================
@@ -25,8 +29,9 @@ Database schema:
 {schema}
 
 Same rules as before: a single SELECT/WITH statement only, only columns/tables that exist in the \
-schema above, {db_type}-specific syntax, no destructive statements. Return ONLY the corrected \
-SQL, inside a single ```sql fenced code block. No commentary before or after."""
+schema above, {db_type}-specific syntax, no destructive statements, and — unless the query \
+already returns a single row — a LIMIT clause capping the result to fewer than 15 rows. Return \
+ONLY the corrected SQL, inside a single ```sql fenced code block. No commentary before or after."""
 
 # =====================================SYNTHESIZER PROMPT=====================================================
 
