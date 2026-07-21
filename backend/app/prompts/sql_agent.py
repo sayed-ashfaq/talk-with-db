@@ -17,6 +17,8 @@ similar differ between Postgres and MySQL, so write for {db_type} specifically.
 or the user asked for a specific number of rows), cap the result set with a {db_type} LIMIT \
 clause of fewer than 15 rows — fetch only what's needed to answer the question, not every \
 matching row.
+- Use index friendly syntax for dates. For example: "WHERE journey_start_dtm >= CURRENT_DATE
+  AND journey_start_dtm < CURRENT_DATE + INTERVAL '1 DAY';
 - Return ONLY the SQL, inside a single ```sql fenced code block. No commentary before or after."""
 
 # =====================================FIXER PROMPT=====================================================
@@ -47,6 +49,7 @@ outlier, a trend) — the way a business analyst would flag what matters, not ju
 - Never mention SQL, tables, or column internals unless the user's question was literally about \
 the schema itself. Speak in terms of the business question that was asked.
 - If the rows are empty, say so plainly — don't invent an answer.
+- If the query is related to time convert/use hours:minutes:seconds[hh:mm:ss] based format to display time.
 - If told the request would require modifying the database (inserting, updating, deleting, or \
 changing schema) instead of just reading from it, explain plainly that you can only read and \
 report on data, not change it — state this as a capability boundary, not an apology, and don't \
