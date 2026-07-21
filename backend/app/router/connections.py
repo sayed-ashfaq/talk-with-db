@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal, Optional
 
 from fastapi import APIRouter
@@ -89,6 +90,46 @@ def remove_connection(connection_id: int) -> dict:
     return {"deleted": connection_id}
 
 
+class AnnotationRequest(BaseModel):
+    table_name: str
+    comment: str
+    schema_name: Optional[str] = None
+    column_name: Optional[str] = None  # omit/None for a table-level comment
+
+
+class AnnotationResponse(BaseModel):
+    id: int
+    connection_id: int
+    table_name: str
+    comment: str
+    schema_name: Optional[str] = None
+    column_name: Optional[str] = None
+    updated_at: datetime
+
+
+@router.get("/connections/{connection_id}/annotations", response_model=list[AnnotationResponse])
+def get_annotations(connection_id: int) -> list[AnnotationResponse]:
+    return [AnnotationResponse(**row) for row in db.list_annotations(connection_id)]
+
+
+@router.put("/connections/{connection_id}/annotations", response_model=AnnotationResponse)
+def put_annotation(connection_id: int, request: AnnotationRequest) -> AnnotationResponse:
+    result = db.upsert_annotation(
+        connection_id=connection_id,
+        table_name=request.table_name,
+        comment=request.comment,
+        schema_name=request.schema_name,
+        column_name=request.column_name,
+    )
+    return AnnotationResponse(**result)
+
+
+@router.delete("/connections/{connection_id}/annotations/{annotation_id}")
+def remove_annotation(connection_id: int, annotation_id: int) -> dict:
+    db.delete_annotation(connection_id, annotation_id)
+    return {"deleted": annotation_id}
+
+
 class SchemaResponse(BaseModel):
     schema_type: Literal["plain", "graph"]
     schema_text: str
@@ -98,7 +139,7 @@ class SchemaResponse(BaseModel):
 def get_schema(schema_type: Literal["plain", "graph"] = "plain") -> SchemaResponse:
     connection = db.get_active()
     if schema_type == "plain":
-        text = connection.schema_text
+        text = db.get_active_schema_text()
     else:
         with log_duration("Build schema graph (view)"):
             graph = _get_or_build_graph(connection)

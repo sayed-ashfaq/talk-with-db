@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ForceGraph2D from "react-force-graph-2d";
 import Modal from "../common/Modal";
+import { EditIcon } from "../common/icons";
+import ColumnCommentModal from "./ColumnCommentModal";
 import * as api from "../../api/client";
 import styles from "./SchemaGraphModal.module.css";
 
@@ -35,7 +37,20 @@ function formatRowCount(count) {
   return `~${count.toLocaleString()} rows`;
 }
 
-export default function SchemaGraphModal({ onClose }) {
+// annotations come back from the API keyed by separate schema_name/table_name/column_name
+// fields — this is the single lookup key used everywhere on the frontend side, column_name=""
+// reserved (per the backend) for a table-level comment, which this view doesn't edit yet
+function annotationKey(tableId, columnName) {
+  return `${tableId}::${columnName || ""}`;
+}
+
+function splitQualifiedName(node) {
+  const schemaName = node.schemaGroup === DEFAULT_GROUP ? null : node.schemaGroup;
+  const tableName = schemaName ? node.id.slice(schemaName.length + 1) : node.id;
+  return { schemaName, tableName };
+}
+
+export default function SchemaGraphModal({ connectionId, onClose }) {
   const [graphData, setGraphData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -45,6 +60,8 @@ export default function SchemaGraphModal({ onClose }) {
   const [pointerPos, setPointerPos] = useState({ x: 0, y: 0 });
   const [graphTheme, setGraphTheme] = useState(readGraphTheme);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [annotations, setAnnotations] = useState(new Map());
+  const [editingColumn, setEditingColumn] = useState(null); // { node, columnName } | null
 
   const fgRef = useRef(null);
   const containerRef = useRef(null);
@@ -78,6 +95,27 @@ export default function SchemaGraphModal({ onClose }) {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!connectionId) return undefined;
+    let cancelled = false;
+    api
+      .listAnnotations(connectionId)
+      .then((rows) => {
+        if (cancelled) return;
+        const map = new Map();
+        for (const row of rows) {
+          const tableId = row.schema_name ? `${row.schema_name}.${row.table_name}` : row.table_name;
+          map.set(annotationKey(tableId, row.column_name), row);
+        }
+        setAnnotations(map);
+      })
+      // comments are a supplementary layer — a failed fetch shouldn't block viewing the graph
+      .catch((err) => console.warn("could not load column comments:", err.message));
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionId]);
 
   // Canvas colors are drawn manually, so they don't follow CSS media queries automatically —
   // re-read the theme vars if the OS switches light/dark while the modal is open.
@@ -164,6 +202,30 @@ export default function SchemaGraphModal({ onClose }) {
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     setPointerPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+  };
+
+  const handleSaveComment = async (comment) => {
+    const { node, columnName } = editingColumn;
+    const { schemaName, tableName } = splitQualifiedName(node);
+    const saved = await api.upsertAnnotation(connectionId, {
+      schema_name: schemaName,
+      table_name: tableName,
+      column_name: columnName,
+      comment,
+    });
+    setAnnotations((prev) => new Map(prev).set(annotationKey(node.id, columnName), saved));
+  };
+
+  const handleRemoveComment = async () => {
+    const { node, columnName } = editingColumn;
+    const existing = annotations.get(annotationKey(node.id, columnName));
+    if (!existing) return;
+    await api.deleteAnnotation(connectionId, existing.id);
+    setAnnotations((prev) => {
+      const next = new Map(prev);
+      next.delete(annotationKey(node.id, columnName));
+      return next;
+    });
   };
 
   const showLegend = schemaGroups.length >= 2;
@@ -264,15 +326,21 @@ export default function SchemaGraphModal({ onClose }) {
               <div className={styles.tooltipTitle}>{hoveredNode.id}</div>
               <div className={styles.tooltipMeta}>{formatRowCount(hoveredNode.rowCount)}</div>
               <ul className={styles.tooltipColumns}>
-                {hoveredNode.columns.slice(0, 10).map((c) => (
-                  <li key={c.name}>
-                    <span>
-                      {c.name}
-                      {c.pk && <span className={styles.tooltipPk}>PK</span>}
-                    </span>
-                    <span className={styles.tooltipType}>{c.type}</span>
-                  </li>
-                ))}
+                {hoveredNode.columns.slice(0, 10).map((c) => {
+                  const comment = annotations.get(annotationKey(hoveredNode.id, c.name))?.comment;
+                  return (
+                    <li key={c.name}>
+                      <div className={styles.tooltipColumnRow}>
+                        <span>
+                          {c.name}
+                          {c.pk && <span className={styles.tooltipPk}>PK</span>}
+                        </span>
+                        <span className={styles.tooltipType}>{c.type}</span>
+                      </div>
+                      {comment && <div className={styles.tooltipComment}>{comment}</div>}
+                    </li>
+                  );
+                })}
               </ul>
               {hoveredNode.columns.length > 10 && (
                 <div className={styles.tooltipMore}>+{hoveredNode.columns.length - 10} more columns</div>
@@ -292,20 +360,48 @@ export default function SchemaGraphModal({ onClose }) {
             <p className={styles.detailsMeta}>{formatRowCount(selectedNode.rowCount)}</p>
             <table className={styles.columnTable}>
               <tbody>
-                {selectedNode.columns.map((c) => (
-                  <tr key={c.name}>
-                    <td>
-                      {c.name}
-                      {c.pk && <span className={styles.pkBadge}>PK</span>}
-                    </td>
-                    <td className={styles.colType}>{c.type}</td>
-                  </tr>
-                ))}
+                {selectedNode.columns.map((c) => {
+                  const comment = annotations.get(annotationKey(selectedNode.id, c.name))?.comment;
+                  return (
+                    <tr key={c.name}>
+                      <td>
+                        <div className={styles.columnNameRow}>
+                          <span>
+                            {c.name}
+                            {c.pk && <span className={styles.pkBadge}>PK</span>}
+                          </span>
+                          <button
+                            type="button"
+                            className={styles.editButton}
+                            onClick={() => setEditingColumn({ node: selectedNode, columnName: c.name })}
+                            aria-label={`Edit comment for ${c.name}`}
+                            title="Edit comment"
+                          >
+                            <EditIcon />
+                          </button>
+                        </div>
+                        {comment && <p className={styles.columnComment}>{comment}</p>}
+                      </td>
+                      <td className={styles.colType}>{c.type}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </aside>
         )}
       </div>
+
+      {editingColumn && (
+        <ColumnCommentModal
+          tableId={editingColumn.node.id}
+          columnName={editingColumn.columnName}
+          initialComment={annotations.get(annotationKey(editingColumn.node.id, editingColumn.columnName))?.comment || ""}
+          onSave={handleSaveComment}
+          onRemove={handleRemoveComment}
+          onClose={() => setEditingColumn(null)}
+        />
+      )}
     </Modal>
   );
 }

@@ -113,7 +113,7 @@ def sql_agent_node(state: AgentState) -> dict:
                 "refined_query": state["refined_query"],
                 "db_type": connection.db_type,
                 "db_name": connection.dbname,
-                "schema_text": connection.schema_text,
+                "schema_text": db.get_active_schema_text(),
                 "sql_draft": None,
                 "cleaned_sql": None,
                 "rows": None,

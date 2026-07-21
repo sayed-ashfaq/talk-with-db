@@ -53,3 +53,18 @@ export function deleteConnection(id) {
 export function getSchemaGraph() {
   return request("/connections/schema-graph");
 }
+
+export function listAnnotations(connectionId) {
+  return request(`/connections/${connectionId}/annotations`);
+}
+
+export function upsertAnnotation(connectionId, payload) {
+  return request(`/connections/${connectionId}/annotations`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteAnnotation(connectionId, annotationId) {
+  return request(`/connections/${connectionId}/annotations/${annotationId}`, { method: "DELETE" });
+}

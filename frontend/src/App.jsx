@@ -36,7 +36,9 @@ export default function App() {
         <ChatInput onSend={sendMessage} disabled={isSending} />
       </main>
 
-      {isGraphOpen && <SchemaGraphModal onClose={() => setIsGraphOpen(false)} />}
+      {isGraphOpen && (
+        <SchemaGraphModal connectionId={connections.active?.id} onClose={() => setIsGraphOpen(false)} />
+      )}
     </div>
   );
 }
