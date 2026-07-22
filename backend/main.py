@@ -2,9 +2,12 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.sessions import SessionMiddleware
 
-from app.core.exceptions import NL2SQLError
+from app.core.config import settings
+from app.core.exceptions import AuthError, NL2SQLError
 from app.core.logging import get_logger, setup_logging
+from app.router.auth import router as auth_router
 from app.router.chat import router as chat_router
 from app.router.connections import router as connections_router
 
@@ -21,10 +24,31 @@ app.add_middleware(
     allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_methods=["*"],
     allow_headers=["*"],
+    # required for the session cookie to be sent on cross-origin requests. Note this is why the
+    # origin must stay an explicit regex — the spec forbids pairing credentials with "*".
+    allow_credentials=True,
 )
 
+# signs a short-lived cookie holding the OAuth `state` during the Google redirect. Nothing else
+# uses it; logged-in sessions are server-side rows, not cookie contents.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.session_secret_key,
+    same_site="lax",
+    https_only=settings.cookie_secure,
+)
+
+app.include_router(auth_router)
 app.include_router(chat_router)
 app.include_router(connections_router)
+
+
+@app.exception_handler(AuthError)
+async def auth_error_handler(request: Request, exc: AuthError) -> JSONResponse:
+    # expected outcomes, not faults — logged at info and returned with their own status codes
+    logger.info("auth: %s (%s)", exc.detail, request.url.path)
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
 
 @app.exception_handler(NL2SQLError)
 async def nl2sql_error_handler(request: Request, exc: NL2SQLError) -> JSONResponse:

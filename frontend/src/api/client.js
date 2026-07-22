@@ -13,6 +13,9 @@ async function request(path, options = {}) {
   try {
     response = await fetch(`${BASE_URL}${path}`, {
       headers: { "Content-Type": "application/json" },
+      // the session lives in an httponly cookie — without this, cross-origin requests (frontend
+      // dev server vs backend) neither send it nor accept the Set-Cookie that logs someone in
+      credentials: "include",
       ...options,
     });
   } catch (err) {
@@ -67,4 +70,28 @@ export function upsertAnnotation(connectionId, payload) {
 
 export function deleteAnnotation(connectionId, annotationId) {
   return request(`/connections/${connectionId}/annotations/${annotationId}`, { method: "DELETE" });
+}
+
+export function signup(email, password, fullName) {
+  return request("/auth/signup", {
+    method: "POST",
+    body: JSON.stringify({ email, password, full_name: fullName || undefined }),
+  });
+}
+
+export function login(email, password) {
+  return request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+}
+
+export function logout() {
+  return request("/auth/logout", { method: "POST" });
+}
+
+export function getCurrentUser() {
+  return request("/auth/me");
+}
+
+// full-page navigation, not fetch() — the browser itself has to follow the Google redirect chain
+export function googleLoginUrl() {
+  return `${BASE_URL}/auth/google/login`;
 }

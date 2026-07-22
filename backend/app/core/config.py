@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
@@ -19,6 +21,33 @@ class Settings(BaseSettings):
     # app's own metadata store (saved DB connections), separate from any target DB
     metadata_database_url: str
     credentials_encryption_key: str
+
+    # --- auth ---------------------------------------------------------------------------------
+
+    session_cookie_name: str = "session"
+    session_ttl_days: int = 30
+    # sliding expiry: a session this close to expiring gets extended on use, so active users are
+    # never logged out mid-work while idle sessions still age out on schedule
+    session_refresh_days: int = 7
+
+    # False in local dev because the frontend talks to http://localhost. MUST be True anywhere the
+    # app is reachable over a network, or the cookie travels in plaintext.
+    cookie_secure: bool = False
+    # where the Google callback sends the browser once the session cookie is set
+    frontend_url: str = "http://localhost:5173"
+
+    # signs the short-lived cookie holding the OAuth state parameter (CSRF protection for the
+    # Google redirect). Unrelated to session tokens, which are random and stored server-side.
+    session_secret_key: str
+
+    # optional: Google sign-in stays switched off (endpoints return 503) until both are set, so the
+    # app boots for anyone who hasn't registered OAuth credentials yet
+    google_client_id: Optional[str] = None
+    google_client_secret: Optional[str] = None
+
+    @property
+    def google_oauth_configured(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret)
 
     @field_validator("metadata_database_url")
     @classmethod
