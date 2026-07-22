@@ -13,3 +13,7 @@ dist/
 
 # OS/editor
 .DS_Store
+
+
+# Misc
+dev-notes/
