@@ -1,3 +1,5 @@
+import asyncio
+import uuid
 from datetime import datetime
 from typing import Literal, Optional
 
@@ -6,6 +8,8 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.agents.sql_agent import db, schema_graph
 from app.core.logging import get_logger, log_duration
+from app.db.session import SessionDep
+from app.services import connections as connection_service
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -15,11 +19,13 @@ logger = get_logger(__name__)
 _graph_cache: dict[int, schema_graph.SchemaGraph] = {}
 
 
-def _get_or_build_graph(connection: db.Connection) -> schema_graph.SchemaGraph:
+async def _get_or_build_graph(connection: db.Connection) -> schema_graph.SchemaGraph:
     key = id(connection.engine)
     if key not in _graph_cache:
         _graph_cache.clear()  # only the active connection's graph is worth keeping around
-        _graph_cache[key] = schema_graph.build_schema_graph(connection.engine)
+        with log_duration("Build schema graph (view)"):
+            # embeds every table name — seconds of CPU and blocking driver calls, so off-thread
+            _graph_cache[key] = await asyncio.to_thread(schema_graph.build_schema_graph, connection.engine)
     return _graph_cache[key]
 
 
@@ -42,14 +48,14 @@ class SaveConnectionRequest(BaseModel):
 
 
 class ConnectionResponse(BaseModel):
-    id: int
+    id: uuid.UUID
     name: str
     db_type: str
     dbname: str
 
 
 class ConnectionSummary(BaseModel):
-    id: int
+    id: uuid.UUID
     name: str
     db_type: str
     dbname: str
@@ -57,9 +63,10 @@ class ConnectionSummary(BaseModel):
 
 
 @router.post("/connections", response_model=ConnectionResponse)
-def create_connection(request: SaveConnectionRequest) -> ConnectionResponse:
+async def create_connection(request: SaveConnectionRequest, session: SessionDep) -> ConnectionResponse:
     logger.info("saving connection '%s' (%s)", request.name, request.db_type)
-    result = db.save_connection(
+    result = await connection_service.save_connection(
+        session,
         name=request.name,
         db_type=request.db_type,
         host=request.host,
@@ -73,21 +80,21 @@ def create_connection(request: SaveConnectionRequest) -> ConnectionResponse:
 
 
 @router.get("/connections", response_model=list[ConnectionSummary])
-def get_connections() -> list[ConnectionSummary]:
-    return [ConnectionSummary(**row) for row in db.list_connections()]
+async def get_connections(session: SessionDep) -> list[ConnectionSummary]:
+    return [ConnectionSummary(**row) for row in await connection_service.list_connections(session)]
 
 
 @router.post("/connections/{connection_id}/activate", response_model=ConnectionResponse)
-def activate_connection(connection_id: int) -> ConnectionResponse:
+async def activate_connection(connection_id: uuid.UUID, session: SessionDep) -> ConnectionResponse:
     logger.info("activating connection id=%s", connection_id)
-    result = db.activate_connection(connection_id)
+    result = await connection_service.activate_connection(session, connection_id)
     return ConnectionResponse(**result)
 
 
 @router.delete("/connections/{connection_id}")
-def remove_connection(connection_id: int) -> dict:
-    db.delete_connection(connection_id)
-    return {"deleted": connection_id}
+async def remove_connection(connection_id: uuid.UUID, session: SessionDep) -> dict:
+    await connection_service.delete_connection(session, connection_id)
+    return {"deleted": str(connection_id)}
 
 
 class AnnotationRequest(BaseModel):
@@ -98,8 +105,8 @@ class AnnotationRequest(BaseModel):
 
 
 class AnnotationResponse(BaseModel):
-    id: int
-    connection_id: int
+    id: uuid.UUID
+    connection_id: uuid.UUID
     table_name: str
     comment: str
     schema_name: Optional[str] = None
@@ -108,13 +115,16 @@ class AnnotationResponse(BaseModel):
 
 
 @router.get("/connections/{connection_id}/annotations", response_model=list[AnnotationResponse])
-def get_annotations(connection_id: int) -> list[AnnotationResponse]:
-    return [AnnotationResponse(**row) for row in db.list_annotations(connection_id)]
+async def get_annotations(connection_id: uuid.UUID, session: SessionDep) -> list[AnnotationResponse]:
+    return [AnnotationResponse(**row) for row in await connection_service.list_annotations(session, connection_id)]
 
 
 @router.put("/connections/{connection_id}/annotations", response_model=AnnotationResponse)
-def put_annotation(connection_id: int, request: AnnotationRequest) -> AnnotationResponse:
-    result = db.upsert_annotation(
+async def put_annotation(
+    connection_id: uuid.UUID, request: AnnotationRequest, session: SessionDep
+) -> AnnotationResponse:
+    result = await connection_service.upsert_annotation(
+        session,
         connection_id=connection_id,
         table_name=request.table_name,
         comment=request.comment,
@@ -125,9 +135,9 @@ def put_annotation(connection_id: int, request: AnnotationRequest) -> Annotation
 
 
 @router.delete("/connections/{connection_id}/annotations/{annotation_id}")
-def remove_annotation(connection_id: int, annotation_id: int) -> dict:
-    db.delete_annotation(connection_id, annotation_id)
-    return {"deleted": annotation_id}
+async def remove_annotation(connection_id: uuid.UUID, annotation_id: uuid.UUID, session: SessionDep) -> dict:
+    await connection_service.delete_annotation(session, connection_id, annotation_id)
+    return {"deleted": str(annotation_id)}
 
 
 class SchemaResponse(BaseModel):
@@ -136,13 +146,12 @@ class SchemaResponse(BaseModel):
 
 
 @router.get("/connections/schema", response_model=SchemaResponse)
-def get_schema(schema_type: Literal["plain", "graph"] = "plain") -> SchemaResponse:
+async def get_schema(session: SessionDep, schema_type: Literal["plain", "graph"] = "plain") -> SchemaResponse:
     connection = db.get_active()
     if schema_type == "plain":
-        text = db.get_active_schema_text()
+        text = await connection_service.get_active_schema_text(session)
     else:
-        with log_duration("Build schema graph (view)"):
-            graph = _get_or_build_graph(connection)
+        graph = await _get_or_build_graph(connection)
         text = schema_graph.render_graph_text(graph)
     return SchemaResponse(schema_type=schema_type, schema_text=text)
 
@@ -175,13 +184,12 @@ class SchemaGraphResponse(BaseModel):
 
 
 @router.get("/connections/schema-graph", response_model=SchemaGraphResponse, response_model_by_alias=True)
-def get_schema_graph() -> SchemaGraphResponse:
+async def get_schema_graph() -> SchemaGraphResponse:
     """Structured node-link data for the frontend's schema graph view — same SchemaGraph object
     render_graph_text() flattens to text, just shaped as JSON instead."""
     connection = db.get_active()
-    with log_duration("Build schema graph (view)"):
-        graph = _get_or_build_graph(connection)
-    row_counts = schema_graph.get_row_counts(connection.engine)
+    graph = await _get_or_build_graph(connection)
+    row_counts = await asyncio.to_thread(schema_graph.get_row_counts, connection.engine)
 
     nodes = [
         SchemaNode(

@@ -93,14 +93,14 @@ def build_schema_graph(engine: Engine) -> SchemaGraph:
     tables: dict[str, TableInfo] = {}
     pending_fks: list[tuple[str, dict, Optional[str]]] = []  # (from_table, fk, schema)
 
-    for schema in db._schemas_to_introspect(engine, inspector):
+    for schema in db.schemas_to_introspect(engine, inspector):
         all_columns = inspector.get_multi_columns(schema=schema)
         all_pks = inspector.get_multi_pk_constraint(schema=schema)
         all_fks = inspector.get_multi_foreign_keys(schema=schema)
 
         for table_key, columns in all_columns.items():
             schema_name, table_name = table_key
-            qualified_name = db._qualify(schema_name, table_name)
+            qualified_name = db.qualify(schema_name, table_name)
             pk_columns = set(all_pks.get(table_key, {}).get("constrained_columns") or [])
             cols = [
                 {"name": c["name"], "type": str(c["type"]), "pk": c["name"] in pk_columns} for c in columns
@@ -109,12 +109,12 @@ def build_schema_graph(engine: Engine) -> SchemaGraph:
             graph.add_node(qualified_name)
 
         for table_key, fks in all_fks.items():
-            from_table = db._qualify(table_key[0], table_key[1])
+            from_table = db.qualify(table_key[0], table_key[1])
             for fk in fks:
                 pending_fks.append((from_table, fk, schema))
 
     for from_table, fk, schema in pending_fks:
-        to_table = db._qualify(fk.get("referred_schema") or schema, fk["referred_table"])
+        to_table = db.qualify(fk.get("referred_schema") or schema, fk["referred_table"])
         if to_table not in tables:
             continue  # referenced table outside the introspected set
         for from_col, to_col in zip(fk["constrained_columns"], fk["referred_columns"]):
@@ -147,7 +147,7 @@ _ROW_COUNT_QUERY = {
         WHERE c.relkind = 'r' AND n.nspname NOT IN ('information_schema', 'pg_toast')
           AND n.nspname NOT LIKE 'pg\\_%%'
     """,
-    # mysql's "schema" is the connected database itself — db._qualify(None, table) leaves it
+    # mysql's "schema" is the connected database itself — db.qualify(None, table) leaves it
     # unprefixed, so schema_name is left NULL here to match
     "mysql": """
         SELECT NULL AS schema_name, table_name, table_rows AS estimate
@@ -159,7 +159,7 @@ _ROW_COUNT_QUERY = {
 
 def get_row_counts(engine: Engine) -> dict[str, int]:
     """Approximate row count per table, keyed the same way as SchemaGraph.tables (qualified
-    name via db._qualify) so the caller can zip it straight onto graph nodes."""
+    name via db.qualify) so the caller can zip it straight onto graph nodes."""
     query = _ROW_COUNT_QUERY.get(engine.dialect.name)
     if query is None:
         return {}
@@ -169,7 +169,7 @@ def get_row_counts(engine: Engine) -> dict[str, int]:
     except Exception:
         logger.warning("could not fetch row count estimates", exc_info=True)
         return {}
-    return {db._qualify(schema_name, table_name): max(int(estimate or 0), 0) for schema_name, table_name, estimate in rows}
+    return {db.qualify(schema_name, table_name): max(int(estimate or 0), 0) for schema_name, table_name, estimate in rows}
 
 
 def render_graph_text(schema: SchemaGraph) -> str:

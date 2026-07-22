@@ -4,9 +4,9 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
 from app.agents.main_agent.state import AgentState
-from app.agents.sql_agent import db, sql
+from app.agents.sql_agent import sql
 from app.agents.sql_agent.state import SQLAgentState
-from app.core.exceptions import DestructiveSQLError, NL2SQLError
+from app.core.exceptions import DatabaseConnectionError, DestructiveSQLError, NL2SQLError
 from app.core.llm import get_llm
 from app.core.logging import get_logger, log_duration
 from app.prompts.sql_agent import FIXER_PROMPT, GENERATION_PROMPT, SYNTHESIZER_PROMPT
@@ -106,14 +106,17 @@ _subgraph = _build_subgraph()
 
 
 def sql_agent_node(state: AgentState) -> dict:
-    connection = db.get_active()
+    schema = state.get("schema_context")
+    if schema is None:
+        raise DatabaseConnectionError("no active database connection — save or activate one first")
+
     with log_duration("sql_agent total"):
         result = _subgraph.invoke(
             {
                 "refined_query": state["refined_query"],
-                "db_type": connection.db_type,
-                "db_name": connection.dbname,
-                "schema_text": db.get_active_schema_text(),
+                "db_type": schema.db_type,
+                "db_name": schema.db_name,
+                "schema_text": schema.schema_text,
                 "sql_draft": None,
                 "cleaned_sql": None,
                 "rows": None,

@@ -3,9 +3,15 @@ from typing import Annotated, Optional, TypedDict
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 
+from app.agents.sql_agent.db import SchemaContext
+
 
 class AgentState(TypedDict):
     chat_history: Annotated[list[AnyMessage], add_messages]
+
+    # resolved by the router before the graph runs, because agent nodes are synchronous and the
+    # metadata store is async. None when the user has no active connection.
+    schema_context: Optional[SchemaContext]
 
     question: str
     refined_query: str

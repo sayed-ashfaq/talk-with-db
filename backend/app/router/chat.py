@@ -1,3 +1,4 @@
+import asyncio
 from typing import Literal, Optional
 
 from fastapi import APIRouter
@@ -6,6 +7,8 @@ from pydantic import BaseModel
 
 from app.agents.main_agent.main import graph
 from app.core.logging import get_logger, log_duration
+from app.db.session import SessionDep
+from app.services import connections as connection_service
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -43,13 +46,22 @@ def _to_chat_messages(lc_messages: list[AnyMessage]) -> list[ChatMessage]:
 
 
 @router.post("/chat", response_model=ChatResponse)
-def chat(request: ChatRequest) -> ChatResponse:
+async def chat(request: ChatRequest, session: SessionDep) -> ChatResponse:
     logger.info("received message: %s", request.message)
 
+    # Resolved here, not inside the SQL agent: the agent graph is synchronous and can't await the
+    # annotations read. Stays None when nothing is active — plenty of questions never reach the
+    # SQL agent, and those must still work without a connection.
+    schema_context = await connection_service.get_active_schema_context(session)
+
     with log_duration("Total query completion"):
-        result = graph.invoke(
+        # the graph is sync and spends most of its time in blocking LLM/driver calls, so it runs on
+        # a worker thread rather than stalling the event loop for the whole turn
+        result = await asyncio.to_thread(
+            graph.invoke,
             {
                 "chat_history": _to_lc_messages(request.history),
+                "schema_context": schema_context,
                 "question": request.message,
                 "refined_query": "",
                 "next": "",
@@ -58,7 +70,7 @@ def chat(request: ChatRequest) -> ChatResponse:
                 "attempts": 0,
                 "final_answer": None,
                 "final_sql": None,
-            }
+            },
         )
 
     routed_to = result.get("next") or "respond"
