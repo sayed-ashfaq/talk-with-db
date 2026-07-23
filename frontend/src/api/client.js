@@ -30,11 +30,29 @@ async function request(path, options = {}) {
   return response.status === 204 ? null : response.json();
 }
 
-export function sendChatMessage(message, history) {
+// chatId omitted (or null) starts a new conversation — the response carries the id to use from
+// then on. The server owns the history now; there is nothing to send back.
+export function sendChatMessage(message, chatId) {
   return request("/chat", {
     method: "POST",
-    body: JSON.stringify({ message, history }),
+    body: JSON.stringify({ message, chat_id: chatId ?? null }),
   });
+}
+
+export function listChats() {
+  return request("/chats");
+}
+
+export function getChat(chatId) {
+  return request(`/chats/${chatId}`);
+}
+
+export function renameChat(chatId, title) {
+  return request(`/chats/${chatId}`, { method: "PATCH", body: JSON.stringify({ title }) });
+}
+
+export function deleteChat(chatId) {
+  return request(`/chats/${chatId}`, { method: "DELETE" });
 }
 
 export function listConnections() {

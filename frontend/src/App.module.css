@@ -1,7 +1,16 @@
 .app {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: 100vh;
+  overflow: hidden;
+}
+
+.mainColumn {
+  flex: 1;
+  min-width: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .splash {
@@ -37,6 +46,22 @@
 .brand span {
   font-size: 13px;
   color: var(--color-text-secondary);
+}
+
+.sidebarToggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+}
+
+.sidebarToggle:hover {
+  background: var(--color-bg);
+  color: var(--color-text);
 }
 
 .headerActions {

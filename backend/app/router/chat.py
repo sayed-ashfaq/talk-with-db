@@ -1,48 +1,65 @@
 import asyncio
+import uuid
+from datetime import datetime
 from typing import Literal, Optional
 
 from fastapi import APIRouter
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.agents.main_agent.main import graph
 from app.core.dependencies import CurrentUser
 from app.core.logging import get_logger, log_duration
+from app.db.models import Message
 from app.db.session import SessionDep
+from app.services import chats as chat_service
 from app.services import connections as connection_service
 
 router = APIRouter()
 logger = get_logger(__name__)
 
 
-class ChatMessage(BaseModel):
+class ChatRequest(BaseModel):
+    message: str = Field(min_length=1)
+    # omit to start a new conversation — the response carries the id to use from then on
+    chat_id: Optional[uuid.UUID] = None
+
+
+class MessageResponse(BaseModel):
+    id: uuid.UUID
     role: Literal["user", "assistant"]
     content: str
+    sql: Optional[str] = None
+    routed_to: Optional[str] = None
+    created_at: datetime
 
-
-class ChatRequest(BaseModel):
-    message: str
-    history: list[ChatMessage] = []
+    @classmethod
+    def of(cls, message: Message) -> "MessageResponse":
+        return cls(
+            id=message.id,
+            role=message.role,
+            content=message.content,
+            sql=message.sql,
+            routed_to=message.routed_to,
+            created_at=message.created_at,
+        )
 
 
 class ChatResponse(BaseModel):
+    chat_id: uuid.UUID
+    # echoed so a client that just started a conversation can name it in the sidebar without
+    # re-fetching the list
+    title: str
     reply: str
     routed_to: str
     sql: Optional[str] = None
-    history: list[ChatMessage]
+    message: MessageResponse
 
 
-def _to_lc_messages(history: list[ChatMessage]) -> list[AnyMessage]:
+def _to_lc_messages(history: list[Message]) -> list[AnyMessage]:
     return [
         HumanMessage(content=m.content) if m.role == "user" else AIMessage(content=m.content)
         for m in history
-    ]
-
-
-def _to_chat_messages(lc_messages: list[AnyMessage]) -> list[ChatMessage]:
-    return [
-        ChatMessage(role="user" if isinstance(m, HumanMessage) else "assistant", content=m.content)
-        for m in lc_messages
     ]
 
 
@@ -55,13 +72,27 @@ async def chat(request: ChatRequest, user: CurrentUser, session: SessionDep) -> 
     # plenty of questions never reach the SQL agent, and those must still work without a connection.
     db_context = await connection_service.get_active_db_context(session, user)
 
+    if request.chat_id is None:
+        chat_row = await chat_service.create_chat(
+            session,
+            user.id,
+            title=chat_service.derive_title(request.message),
+            connection_id=user.active_connection_id,
+        )
+        history: list[Message] = []
+    else:
+        # ownership checked here, before any LLM work — posting into someone else's chat must fail
+        # fast rather than after 30 seconds of inference
+        chat_row = await chat_service.get_owned_chat(session, user.id, request.chat_id)
+        history = await chat_service.load_history(session, chat_row.id)
+
     with log_duration("Total query completion"):
         # the graph is sync and spends most of its time in blocking LLM/driver calls, so it runs on
         # a worker thread rather than stalling the event loop for the whole turn
         result = await asyncio.to_thread(
             graph.invoke,
             {
-                "chat_history": _to_lc_messages(request.history),
+                "chat_history": _to_lc_messages(history),
                 "db_context": db_context,
                 "question": request.message,
                 "refined_query": "",
@@ -76,9 +107,23 @@ async def chat(request: ChatRequest, user: CurrentUser, session: SessionDep) -> 
 
     routed_to = result.get("next") or "respond"
     logger.info("routed_to=%s", routed_to)
-    return ChatResponse(
-        reply=result["final_answer"],
-        routed_to=routed_to,
+
+    # committed only now: a failure above leaves no half-written turn, and an abandoned new chat
+    # leaves no empty row
+    _, assistant = await chat_service.append_turn(
+        session,
+        chat_row,
+        question=request.message,
+        answer=result["final_answer"],
         sql=result.get("final_sql"),
-        history=_to_chat_messages(result["chat_history"]),
+        routed_to=routed_to,
+    )
+
+    return ChatResponse(
+        chat_id=chat_row.id,
+        title=chat_row.title,
+        reply=assistant.content,
+        routed_to=routed_to,
+        sql=assistant.sql,
+        message=MessageResponse.of(assistant),
     )

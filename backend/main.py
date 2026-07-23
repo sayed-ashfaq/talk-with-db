@@ -9,6 +9,7 @@ from app.core.exceptions import AppError, NL2SQLError
 from app.core.logging import get_logger, setup_logging
 from app.router.auth import router as auth_router
 from app.router.chat import router as chat_router
+from app.router.chats import router as chats_router
 from app.router.connections import router as connections_router
 
 setup_logging()
@@ -40,6 +41,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(chat_router)
+app.include_router(chats_router)
 app.include_router(connections_router)
 
 

@@ -37,6 +37,37 @@ export function EditIcon() {
   );
 }
 
+export function PlusIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d="M7 1.5V12.5M1.5 7H12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function TrashIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+      <path
+        d="M2.5 3.5H11.5M5.5 3.5V2C5.5 1.72386 5.72386 1.5 6 1.5H8C8.27614 1.5 8.5 1.72386 8.5 2V3.5M4 3.5V11.5C4 11.7761 4.22386 12 4.5 12H9.5C9.77614 12 10 11.7761 10 11.5V3.5"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function SidebarIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <rect x="1.5" y="2.5" width="13" height="11" rx="2" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M6 2.5V13.5" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  );
+}
+
 export function GoogleIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18">

@@ -30,6 +30,13 @@ class ConnectionNameTakenError(AppError):
     detail = "you already have a connection with this name"
 
 
+class ChatNotFoundError(AppError):
+    status_code = 404
+    # same reasoning as ConnectionNotFoundError: identical whether the chat is unknown or someone
+    # else's, so the id space can't be probed
+    detail = "no such chat"
+
+
 class NoActiveConnectionError(AppError):
     # 409 rather than 400: the request is well-formed, the account just isn't pointed at a database
     # yet. A distinct code so the frontend can prompt "pick a connection" instead of showing an error.
