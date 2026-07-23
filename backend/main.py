@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.core.config import settings
-from app.core.exceptions import AuthError, NL2SQLError
+from app.core.exceptions import AppError, NL2SQLError
 from app.core.logging import get_logger, setup_logging
 from app.router.auth import router as auth_router
 from app.router.chat import router as chat_router
@@ -43,10 +43,12 @@ app.include_router(chat_router)
 app.include_router(connections_router)
 
 
-@app.exception_handler(AuthError)
-async def auth_error_handler(request: Request, exc: AuthError) -> JSONResponse:
-    # expected outcomes, not faults — logged at info and returned with their own status codes
-    logger.info("auth: %s (%s)", exc.detail, request.url.path)
+@app.exception_handler(AppError)
+async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
+    # expected outcomes, not faults — logged at info and returned with their own status codes.
+    # Registered on the base class: Starlette walks the exception's MRO to find a handler, so this
+    # one covers AuthError, ConnectionNotFoundError and every other subclass.
+    logger.info("%s: %s (%s)", type(exc).__name__, exc.detail, request.url.path)
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 

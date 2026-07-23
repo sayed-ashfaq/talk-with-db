@@ -32,6 +32,23 @@ class User(Base):
     # soft off-switch: revoking access shouldn't destroy the user's chats and connections
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
 
+    # which target database this user is currently pointed at. The live engine lives in
+    # app.services.connection_registry (process memory); this column is what lets a restart — or an
+    # eviction from that registry — rebuild it lazily instead of making the user re-activate.
+    # SET NULL rather than CASCADE: deleting a connection must not delete its owner.
+    active_connection_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        # use_alter: users and saved_connections reference each other, so this one constraint is
+        # emitted as a separate ALTER TABLE to break the cycle at create time
+        ForeignKey(
+            "saved_connections.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_users_active_connection_id_saved_connections",
+        ),
+        nullable=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

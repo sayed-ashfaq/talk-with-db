@@ -6,6 +6,7 @@ from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from pydantic import BaseModel
 
 from app.agents.main_agent.main import graph
+from app.core.dependencies import CurrentUser
 from app.core.logging import get_logger, log_duration
 from app.db.session import SessionDep
 from app.services import connections as connection_service
@@ -46,13 +47,13 @@ def _to_chat_messages(lc_messages: list[AnyMessage]) -> list[ChatMessage]:
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest, session: SessionDep) -> ChatResponse:
-    logger.info("received message: %s", request.message)
+async def chat(request: ChatRequest, user: CurrentUser, session: SessionDep) -> ChatResponse:
+    logger.info("user %s: %s", user.id, request.message)
 
-    # Resolved here, not inside the SQL agent: the agent graph is synchronous and can't await the
-    # annotations read. Stays None when nothing is active — plenty of questions never reach the
-    # SQL agent, and those must still work without a connection.
-    schema_context = await connection_service.get_active_schema_context(session)
+    # Resolved here, not inside the SQL agent: the agent graph is synchronous and can neither await
+    # the annotations read nor rebuild a connection. Stays None when the user has nothing active —
+    # plenty of questions never reach the SQL agent, and those must still work without a connection.
+    db_context = await connection_service.get_active_db_context(session, user)
 
     with log_duration("Total query completion"):
         # the graph is sync and spends most of its time in blocking LLM/driver calls, so it runs on
@@ -61,7 +62,7 @@ async def chat(request: ChatRequest, session: SessionDep) -> ChatResponse:
             graph.invoke,
             {
                 "chat_history": _to_lc_messages(request.history),
-                "schema_context": schema_context,
+                "db_context": db_context,
                 "question": request.message,
                 "refined_query": "",
                 "next": "",

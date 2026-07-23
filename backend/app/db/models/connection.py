@@ -10,15 +10,26 @@ from app.db.base import Base
 
 class SavedConnection(Base):
     """A target database a user has registered. `url_encrypted` holds the full SQLAlchemy URL,
-    credentials included, Fernet-encrypted — it is never returned to the client."""
+    credentials included, Fernet-encrypted — it is never returned to the client.
+
+    Private to its owner: every query in app.services.connections filters on user_id, and there is
+    no sharing mechanism. Deleting a user takes their connections (and, by cascade, the annotations
+    on them) with it.
+    """
 
     __tablename__ = "saved_connections"
+    __table_args__ = (
+        # per user, not globally — two people should both be allowed a connection called "prod"
+        UniqueConstraint("user_id", "name", name="uq_saved_connections_user_name"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
     )
-    # unique globally for now; becomes unique-per-user once connections gain an owner
-    name: Mapped[str] = mapped_column(String(255), unique=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(255))
     db_type: Mapped[str] = mapped_column(String(32))
     url_encrypted: Mapped[str] = mapped_column(Text)
     dbname: Mapped[str] = mapped_column(String(255))

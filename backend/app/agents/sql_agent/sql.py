@@ -90,7 +90,7 @@ def clean_sql(llm_output: str, dialect: str) -> str:
     return sql
 
 
-def clean_and_execute(llm_output: str, dialect: str) -> tuple[str, list[dict]]:
+def clean_and_execute(llm_output: str, dialect: str, connection: db.Connection) -> tuple[str, list[dict]]:
     sql = clean_sql(llm_output, dialect)
-    rows = db.run_query(sql)
+    rows = db.run_query(sql, connection)
     return sql, rows

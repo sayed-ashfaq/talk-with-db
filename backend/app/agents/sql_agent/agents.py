@@ -6,7 +6,7 @@ from langgraph.graph import END, START, StateGraph
 from app.agents.main_agent.state import AgentState
 from app.agents.sql_agent import sql
 from app.agents.sql_agent.state import SQLAgentState
-from app.core.exceptions import DatabaseConnectionError, DestructiveSQLError, NL2SQLError
+from app.core.exceptions import DestructiveSQLError, NL2SQLError, NoActiveConnectionError
 from app.core.llm import get_llm
 from app.core.logging import get_logger, log_duration
 from app.prompts.sql_agent import FIXER_PROMPT, GENERATION_PROMPT, SYNTHESIZER_PROMPT
@@ -26,7 +26,7 @@ def generate_node(state: SQLAgentState) -> dict:
 def execute_node(state: SQLAgentState) -> dict:
     try:
         with log_duration("SQL execution"):
-            cleaned, rows = sql.clean_and_execute(state["sql_draft"], state["db_type"])
+            cleaned, rows = sql.clean_and_execute(state["sql_draft"], state["db_type"], state["connection"])
         logger.info("executed SQL: %s", cleaned)
         return {"cleaned_sql": cleaned, "rows": rows, "error": None, "blocked_reason": None}
     except DestructiveSQLError as exc:
@@ -106,17 +106,18 @@ _subgraph = _build_subgraph()
 
 
 def sql_agent_node(state: AgentState) -> dict:
-    schema = state.get("schema_context")
-    if schema is None:
-        raise DatabaseConnectionError("no active database connection — save or activate one first")
+    context = state.get("db_context")
+    if context is None:
+        raise NoActiveConnectionError
 
     with log_duration("sql_agent total"):
         result = _subgraph.invoke(
             {
                 "refined_query": state["refined_query"],
-                "db_type": schema.db_type,
-                "db_name": schema.db_name,
-                "schema_text": schema.schema_text,
+                "connection": context.connection,
+                "db_type": context.db_type,
+                "db_name": context.db_name,
+                "schema_text": context.schema_text,
                 "sql_draft": None,
                 "cleaned_sql": None,
                 "rows": None,

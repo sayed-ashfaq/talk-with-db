@@ -6,14 +6,13 @@ functions that reach the network are wrapped in a thread to keep the event loop 
 """
 
 import asyncio
-import uuid
 from dataclasses import dataclass, field
 from typing import Literal, Optional
 
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.engine import Engine, make_url
 
-from app.core.exceptions import DatabaseConnectionError, SQLExecutionError
+from app.core.exceptions import ConnectionUnreachableError, SQLExecutionError
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -59,51 +58,30 @@ class Connection:
 
 
 @dataclass(frozen=True)
-class SchemaContext:
-    """Everything the SQL agent needs to know about the active database, resolved by the router
-    before the graph runs — agent nodes are synchronous and cannot await the annotations read.
+class DbContext:
+    """Everything the SQL agent needs in order to answer against one user's database, resolved by
+    the router before the graph runs — agent nodes are synchronous and cannot await the annotations
+    read, nor reach into the async registry.
 
     Lives here rather than in the service layer so app.agents.main_agent.state can name it in
     AgentState without an agent module importing a service. LangGraph resolves state type hints at
     runtime, so this import cannot be deferred behind TYPE_CHECKING.
+
+    Carrying the live `connection` is what removes the last process-wide global: run_query used to
+    reach for whichever database was active server-wide, which with more than one user meant
+    answering questions against somebody else's data.
     """
 
-    db_type: str
-    db_name: str
+    connection: Connection
     schema_text: str
 
+    @property
+    def db_type(self) -> str:
+        return self.connection.db_type
 
-# --- active connection ------------------------------------------------------------------------
-# Process-wide, so every user of this server shares one target database. That is the single-tenancy
-# blocker: it becomes a per-user registry keyed by user id once authentication exists.
-
-_active: Optional[Connection] = None
-_active_id: Optional[uuid.UUID] = None
-
-
-def set_active(connection: Connection, connection_id: uuid.UUID) -> None:
-    global _active, _active_id
-    _active, _active_id = connection, connection_id
-
-
-def clear_active() -> None:
-    global _active, _active_id
-    _active, _active_id = None, None
-
-
-def get_active() -> Connection:
-    if _active is None:
-        raise DatabaseConnectionError("no active database connection — save or activate one first")
-    return _active
-
-
-def peek_active() -> Optional[Connection]:
-    """get_active() without the raise, for callers where "nothing active yet" is a normal state."""
-    return _active
-
-
-def get_active_id() -> Optional[uuid.UUID]:
-    return _active_id
+    @property
+    def db_name(self) -> str:
+        return self.connection.dbname
 
 
 # --- connecting -------------------------------------------------------------------------------
@@ -133,7 +111,7 @@ def _build_connection_blocking(db_type: DBType, sqlalchemy_url: str, dbname: str
         with engine.connect() as conn:
             conn.exec_driver_sql("SELECT 1")
     except Exception as exc:
-        raise DatabaseConnectionError(f"could not connect to {db_type} database '{dbname}'") from exc
+        raise ConnectionUnreachableError(f"could not connect to {db_type} database '{dbname}'") from exc
 
     tables = _introspect(engine)
     logger.info("connected to %s database '%s' — %d table(s) found", db_type, dbname, len(tables))
@@ -218,8 +196,8 @@ def render_schema_text(tables: dict[str, TableSchema], annotations: dict[tuple[s
     return "\n\n".join(blocks)
 
 
-def run_query(sql: str) -> list[dict]:
-    connection = get_active()
+def run_query(sql: str, connection: Connection) -> list[dict]:
+    """The connection is passed in, never looked up — see DbContext for why."""
     try:
         with connection.engine.connect() as conn:
             if connection.db_type == "postgres":
