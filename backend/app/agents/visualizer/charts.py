@@ -175,7 +175,9 @@ class _Choice(BaseModel):
     """What the model is allowed to contribute: which candidate, which of its measures, and a
     title a person would actually want above the chart."""
 
-    choice: int = Field(description="the number of the chart to draw, or -1 to draw none")
+    # Groq validates tool-call arguments before Pydantic can coerce them, and some models emit
+    # small integers as JSON strings. Keep the schema stringly and parse below.
+    choice: str = Field(description='the chart number to draw as a string, or "-1" to draw none')
     y: list[str] = Field(description="which of that chart's y columns to plot — all of them unless one is noise")
     title: str = Field(description="a short title in the language of the question, not the column names")
     reason: str = Field(description="one clause on why this chart answers the question")
@@ -205,13 +207,19 @@ def _choose(question: str, profile: ResultProfile, options: list[Candidate], row
             [SystemMessage(content=CHOICE_PROMPT), HumanMessage(content=context)]
         )
 
-    if not 0 <= choice.choice < len(options):
+    try:
+        selected = int(choice.choice)
+    except ValueError:
+        logger.info("visualizer declined to chart (choice=%s)", choice.choice)
+        return None
+
+    if not 0 <= selected < len(options):
         # -1 is the documented way to decline; anything else out of range is a misread prompt, and
         # either way there is no chart to draw
         logger.info("visualizer declined to chart (choice=%s)", choice.choice)
         return None
 
-    candidate = options[choice.choice]
+    candidate = options[selected]
     # the model may narrow the measures but not invent them
     narrowed = [name for name in choice.y if name in candidate.y]
     return _spec(candidate, choice.title, choice.reason, narrowed or None)

@@ -4,7 +4,8 @@ CHOICE_PROMPT = """You are a data analyst choosing how to display a query result
 the question that was asked, the shape of the result, a few sample rows, and a numbered list of \
 charts that the data can actually support.
 
-Pick the one that answers the question best, and return its number.
+Pick the one that answers the question best, and return its number as a JSON string, e.g. \
+`"0"` or `"-1"`.
 
 - Choose by what the question is asking, not by what looks impressive. "How did revenue change \
 this year" wants the trend over time. "Which region sold most" wants the comparison across \
