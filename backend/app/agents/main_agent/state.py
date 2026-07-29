@@ -4,6 +4,8 @@ from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 
 from app.agents.sql_agent.db import DbContext
+from app.agents.visualizer.charts import ChartSpec
+from app.agents.visualizer.profile import ResultProfile
 
 
 class AgentState(TypedDict):
@@ -33,6 +35,11 @@ class AgentState(TypedDict):
     result_rows: Optional[list[dict]]
     result_columns: Optional[list[str]]
     result_truncated: bool
+
+    # how to draw those rows, and what shape they are. Both None when the result isn't worth a
+    # chart, which is an ordinary outcome — most questions are answered by a sentence.
+    chart_spec: Optional[ChartSpec]
+    chart_profile: Optional[ResultProfile]
 
     final_answer: Optional[str]
     final_sql: Optional[str]

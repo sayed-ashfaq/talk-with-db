@@ -1,10 +1,9 @@
-from typing import Literal
-
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
 from app.agents.main_agent.state import AgentState
 from app.agents.sql_agent import db, sql
+from app.agents.visualizer import charts
 from app.agents.sql_agent.state import SQLAgentState
 from app.core.exceptions import DestructiveSQLError, NL2SQLError, NoActiveConnectionError
 from app.core.llm import get_llm
@@ -55,12 +54,17 @@ def fix_node(state: SQLAgentState) -> dict:
     return {"sql_draft": response.content, "fix_attempts": state.get("fix_attempts", 0) + 1}
 
 
-def route_after_execute(state: SQLAgentState) -> Literal["synthesize", "fix", "give_up"]:
+def route_after_execute(state: SQLAgentState) -> list[str]:
+    """A list, not a name: on success both branches run, in parallel, in the same superstep.
+
+    They write disjoint keys — synthesize the prose, visualize the chart — so LangGraph merges the
+    two updates without either overwriting the other.
+    """
     if state.get("error") is None:
-        return "synthesize"
+        return ["synthesize", "visualize"]
     if state.get("fix_attempts", 0) >= MAX_FIX_ATTEMPTS:
-        return "give_up"
-    return "fix"
+        return ["give_up"]
+    return ["fix"]
 
 
 def _rows_for_synthesis(result: db.QueryResult) -> str:
@@ -97,6 +101,18 @@ def synthesize_node(state: SQLAgentState) -> dict:
     return {"answer": response.content}
 
 
+def visualize_node(state: SQLAgentState) -> dict:
+    result = state.get("query_result")
+    # no rows to chart: a blocked write never ran a query, and an empty result has nothing to show
+    if result is None or not result.rows:
+        return {"chart_spec": None, "chart_profile": None}
+
+    spec, profile = charts.select(state["refined_query"], result)
+    if spec:
+        logger.info("chart: %s of %s by %s", spec.type.value, ", ".join(spec.y), spec.x)
+    return {"chart_spec": spec, "chart_profile": profile}
+
+
 def give_up_node(state: SQLAgentState) -> dict:
     return {
         "answer": (
@@ -113,15 +129,15 @@ def _build_subgraph():
     graph.add_node("execute", execute_node)
     graph.add_node("fix", fix_node)
     graph.add_node("synthesize", synthesize_node)
+    graph.add_node("visualize", visualize_node)
     graph.add_node("give_up", give_up_node)
 
     graph.add_edge(START, "generate")
     graph.add_edge("generate", "execute")
-    graph.add_conditional_edges(
-        "execute", route_after_execute, {"synthesize": "synthesize", "fix": "fix", "give_up": "give_up"}
-    )
+    graph.add_conditional_edges("execute", route_after_execute, ["synthesize", "visualize", "fix", "give_up"])
     graph.add_edge("fix", "execute")
     graph.add_edge("synthesize", END)
+    graph.add_edge("visualize", END)
     graph.add_edge("give_up", END)
 
     return graph.compile()
@@ -149,6 +165,8 @@ def sql_agent_node(state: AgentState) -> dict:
                 "error": None,
                 "blocked_reason": None,
                 "fix_attempts": 0,
+                "chart_spec": None,
+                "chart_profile": None,
                 "answer": None,
             }
         )
@@ -161,4 +179,6 @@ def sql_agent_node(state: AgentState) -> dict:
         "result_rows": result.rows if result else None,
         "result_columns": result.columns if result else None,
         "result_truncated": bool(result and result.truncated),
+        "chart_spec": final.get("chart_spec"),
+        "chart_profile": final.get("chart_profile"),
     }

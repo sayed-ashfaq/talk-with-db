@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     # one model id per agent, so each can be tuned independently
     main_agent_model: str = "llama-3.3-70b-versatile"
     sql_agent_model: str = "openai/gpt-oss-120b"
+    # picks between pre-validated chart options — a small judgement call on a short prompt, so it
+    # has no use for a larger model than this
+    visualizer_model: str = "llama-3.3-70b-versatile"
 
     # app's own metadata store (saved DB connections), separate from any target DB
     metadata_database_url: str

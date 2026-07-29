@@ -8,6 +8,7 @@ from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from pydantic import BaseModel, Field
 
 from app.agents.main_agent.main import graph
+from app.agents.visualizer.charts import ChartSpec
 from app.core.dependencies import CurrentUser
 from app.core.logging import get_logger, log_duration
 from app.db.models import Message
@@ -45,6 +46,16 @@ class MessageResponse(BaseModel):
         )
 
 
+class ColumnInfo(BaseModel):
+    """One column's shape. The chart controls are built from this: which columns can be an axis,
+    which can be a measure, and which have too many distinct values to be either."""
+
+    name: str
+    role: str  # "temporal" | "numeric" | "categorical"
+    distinct: int
+    nulls: int
+
+
 class QueryData(BaseModel):
     """The rows behind an answer, when the turn ran a query.
 
@@ -58,6 +69,12 @@ class QueryData(BaseModel):
     # the result hit the row cap and there is likely more behind it — the client should say so
     # rather than presenting a capped result as complete
     truncated: bool
+    # how to draw this, when there's a chart worth drawing. Null is ordinary — most answers are a
+    # sentence, and a chart of them would be decoration.
+    chart: Optional[ChartSpec] = None
+    # sent whenever rows are, chart or not: it's what lets the client offer a different chart than
+    # the one chosen here without asking the server again
+    profile: list[ColumnInfo] = []
 
 
 class ChatResponse(BaseModel):
@@ -78,11 +95,18 @@ def _query_data(result: dict) -> Optional[QueryData]:
     rows = result.get("result_rows")
     if rows is None:
         return None
+
+    profile = result.get("chart_profile")
     return QueryData(
         columns=result.get("result_columns") or [],
         rows=rows,
         row_count=len(rows),
         truncated=bool(result.get("result_truncated")),
+        chart=result.get("chart_spec"),
+        profile=[
+            ColumnInfo(name=c.name, role=c.role, distinct=c.distinct, nulls=c.nulls)
+            for c in (profile.columns if profile else [])
+        ],
     )
 
 
@@ -133,6 +157,8 @@ async def chat(request: ChatRequest, user: CurrentUser, session: SessionDep) -> 
                 "result_rows": None,
                 "result_columns": None,
                 "result_truncated": False,
+                "chart_spec": None,
+                "chart_profile": None,
                 "final_answer": None,
                 "final_sql": None,
             },

@@ -1,6 +1,8 @@
 from typing import Optional, TypedDict
 
 from app.agents.sql_agent.db import Connection, QueryResult
+from app.agents.visualizer.charts import ChartSpec
+from app.agents.visualizer.profile import ResultProfile
 
 
 class SQLAgentState(TypedDict):
@@ -20,6 +22,12 @@ class SQLAgentState(TypedDict):
     error: Optional[str]
     blocked_reason: Optional[str]
     fix_attempts: int
+
+    # written by visualize, which runs beside synthesize rather than after it — the two read the
+    # same rows and need nothing from each other, so serialising them would add a whole model call
+    # to the turn for no reason. None whenever the result isn't worth a chart.
+    chart_spec: Optional[ChartSpec]
+    chart_profile: Optional[ResultProfile]
 
     # the prose answer, named apart from query_result so the two are not mistaken for each other
     answer: Optional[str]
