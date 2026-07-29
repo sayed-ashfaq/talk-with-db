@@ -12,6 +12,7 @@ from typing import Literal, Optional
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.engine import Engine, make_url
 
+from app.agents.sql_agent import rows
 from app.core.exceptions import ConnectionUnreachableError, SQLExecutionError
 from app.core.logging import get_logger
 
@@ -24,7 +25,12 @@ _DRIVER = {
     "mysql": "mysql+pymysql",
 }
 
-MAX_ROWS = 500
+# The ceiling on one result set. Enforced twice, deliberately: sql.apply_row_cap writes it into the
+# query so the database itself stops early, and the fetch below repeats it in case a query somehow
+# reaches here uncapped. 500 was enough while a result only ever became a paragraph of prose;
+# charts need the rows behind the summary, and 5000 is roughly where a browser stops rendering
+# them comfortably anyway.
+MAX_ROWS = 5000
 QUERY_TIMEOUT_MS = 10_000
 
 
@@ -196,7 +202,28 @@ def render_schema_text(tables: dict[str, TableSchema], annotations: dict[tuple[s
     return "\n\n".join(blocks)
 
 
-def run_query(sql: str, connection: Connection) -> list[dict]:
+@dataclass(frozen=True)
+class QueryResult:
+    """One execution's output.
+
+    Columns are carried separately from rows because an empty result still has a shape: a table
+    with headers and no data renders, whereas an empty list of dicts is indistinguishable from
+    having nothing to show.
+    """
+
+    columns: list[str]
+    rows: list[dict]
+    # we hit MAX_ROWS and there may be more behind it. False positive in exactly one case — a
+    # result that happens to be MAX_ROWS rows long — which costs the user a truthful "capped at
+    # 5000 rows" note and nothing else.
+    truncated: bool
+
+    @property
+    def row_count(self) -> int:
+        return len(self.rows)
+
+
+def run_query(sql: str, connection: Connection) -> QueryResult:
     """The connection is passed in, never looked up — see DbContext for why."""
     try:
         with connection.engine.connect() as conn:
@@ -205,7 +232,15 @@ def run_query(sql: str, connection: Connection) -> list[dict]:
             else:
                 conn.exec_driver_sql(f"SET SESSION MAX_EXECUTION_TIME = {QUERY_TIMEOUT_MS}")
             result = conn.exec_driver_sql(sql)
-            rows = result.fetchmany(MAX_ROWS)
-            return [dict(zip(result.keys(), row)) for row in rows]
+            fetched = result.fetchmany(MAX_ROWS)
+            columns = rows.unique_columns(result.keys())
     except Exception as exc:
         raise SQLExecutionError(str(exc)) from exc
+
+    # outside the try: a type-conversion bug here is our fault, and reporting it as a failed query
+    # would send the agent off fixing SQL that was already correct
+    return QueryResult(
+        columns=columns,
+        rows=[{name: rows.to_jsonable(value) for name, value in zip(columns, row)} for row in fetched],
+        truncated=len(fetched) >= MAX_ROWS,
+    )

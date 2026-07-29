@@ -71,6 +71,36 @@ def enforce_read_only(sql: str) -> None:
         raise DestructiveSQLError(f"query contains a blocked write/destructive keyword: {match.group(1).upper()}")
 
 
+def apply_row_cap(sql: str, dialect: str, cap: int = db.MAX_ROWS) -> str:
+    """Cap the result size in the query itself.
+
+    The generator used to be told to write its own LIMIT, which made the row budget something the
+    model decided turn by turn — and capped every future chart at whatever number it happened to
+    pick. The cap belongs here instead: deterministic, and applied whether or not the model
+    cooperated.
+
+    It has to be in the SQL rather than in fetchmany. psycopg2 buffers the entire result
+    client-side before the first fetch, so a query matching ten million rows is ten million rows in
+    this process no matter how few we go on to ask for.
+
+    A smaller LIMIT the model wrote on purpose survives — "top 10" means ten.
+    """
+    try:
+        expression = sqlglot.parse_one(sql, read=dialect)
+    except Exception as exc:
+        raise UnsafeSQLError(f"sqlglot could not parse the generated SQL: {exc}") from exc
+
+    limit = expression.args.get("limit")
+    if limit is not None:
+        value = limit.expression
+        if isinstance(value, sqlglot.exp.Literal) and value.is_int and int(value.name) <= cap:
+            return sql
+
+    # .limit() rewrites the outer LIMIT in place rather than wrapping the query in a subquery —
+    # wrapping is where an inner ORDER BY stops being guaranteed to survive
+    return expression.limit(cap).sql(dialect=dialect, pretty=True)
+
+
 def clean_sql(llm_output: str, dialect: str) -> str:
     sql = extract_sql(llm_output)
     logging.info("Generated SQL query: \n%s", sql)
@@ -87,10 +117,14 @@ def clean_sql(llm_output: str, dialect: str) -> str:
 
     sql = sanitize(sql)
     enforce_read_only(sql)
+
+    # capped last: enforce_read_only vets what the model actually wrote, and everything from here
+    # on is SQL we generated ourselves
+    sql = apply_row_cap(sql, dialect)
+    logging.info("Row-capped SQL query: \n%s", sql)
     return sql
 
 
-def clean_and_execute(llm_output: str, dialect: str, connection: db.Connection) -> tuple[str, list[dict]]:
+def clean_and_execute(llm_output: str, dialect: str, connection: db.Connection) -> tuple[str, db.QueryResult]:
     sql = clean_sql(llm_output, dialect)
-    rows = db.run_query(sql, connection)
-    return sql, rows
+    return sql, db.run_query(sql, connection)

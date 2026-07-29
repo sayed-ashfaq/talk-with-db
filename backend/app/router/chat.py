@@ -45,6 +45,21 @@ class MessageResponse(BaseModel):
         )
 
 
+class QueryData(BaseModel):
+    """The rows behind an answer, when the turn ran a query.
+
+    Live-only: not persisted with the message, so reopening a conversation replays the prose but
+    not the table. Charts are what make these worth keeping around, so persistence lands with them.
+    """
+
+    columns: list[str]
+    rows: list[dict]
+    row_count: int
+    # the result hit the row cap and there is likely more behind it — the client should say so
+    # rather than presenting a capped result as complete
+    truncated: bool
+
+
 class ChatResponse(BaseModel):
     chat_id: uuid.UUID
     # echoed so a client that just started a conversation can name it in the sidebar without
@@ -53,7 +68,22 @@ class ChatResponse(BaseModel):
     reply: str
     routed_to: str
     sql: Optional[str] = None
+    data: Optional[QueryData] = None
     message: MessageResponse
+
+
+def _query_data(result: dict) -> Optional[QueryData]:
+    """None unless a query actually ran this turn — a greeting, a web lookup or a blocked write all
+    leave the state's row fields untouched."""
+    rows = result.get("result_rows")
+    if rows is None:
+        return None
+    return QueryData(
+        columns=result.get("result_columns") or [],
+        rows=rows,
+        row_count=len(rows),
+        truncated=bool(result.get("result_truncated")),
+    )
 
 
 def _to_lc_messages(history: list[Message]) -> list[AnyMessage]:
@@ -100,6 +130,9 @@ async def chat(request: ChatRequest, user: CurrentUser, session: SessionDep) -> 
                 "agent_output": None,
                 "agent_sql": None,
                 "attempts": 0,
+                "result_rows": None,
+                "result_columns": None,
+                "result_truncated": False,
                 "final_answer": None,
                 "final_sql": None,
             },
@@ -125,5 +158,6 @@ async def chat(request: ChatRequest, user: CurrentUser, session: SessionDep) -> 
         reply=assistant.content,
         routed_to=routed_to,
         sql=assistant.sql,
+        data=_query_data(result),
         message=MessageResponse.of(assistant),
     )

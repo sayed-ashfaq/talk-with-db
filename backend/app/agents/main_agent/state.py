@@ -21,5 +21,18 @@ class AgentState(TypedDict):
     agent_sql: Optional[str]
     attempts: int
 
+    # The rows behind the answer, carried alongside agent_output rather than through it.
+    #
+    # Every specialist overwrites agent_output and finalize hands whichever one ran last to the
+    # user, so anything that has to survive a second hop cannot live in that field — route
+    # sql_agent -> python_agent through it and the SQL answer is gone by the time the user sees a
+    # chart. These stay put until another query replaces them.
+    #
+    # Deliberately never shown to the supervisor: its decision context is built from prose, and a
+    # few thousand rows of JSON in there would cost more than the whole rest of the turn.
+    result_rows: Optional[list[dict]]
+    result_columns: Optional[list[str]]
+    result_truncated: bool
+
     final_answer: Optional[str]
     final_sql: Optional[str]

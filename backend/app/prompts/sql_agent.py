@@ -13,10 +13,14 @@ schema — no INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, TRUNCATE, EXEC.
 - Use {db_type}-specific syntax and functions — date/time handling, quoting, LIMIT/OFFSET and \
 similar differ between Postgres and MySQL, so write for {db_type} specifically.
 - Prefer explicit column names over SELECT *.
-- Unless the question already returns a single row (a COUNT/SUM/AVG/aggregate with no GROUP BY, \
-or the user asked for a specific number of rows), cap the result set with a {db_type} LIMIT \
-clause of fewer than 15 rows — fetch only what's needed to answer the question, not every \
-matching row.
+- Do NOT add a LIMIT clause of your own. The system caps result size on its own, and a LIMIT you \
+write throws away rows that are needed further down. The one exception is when the question asks \
+for a specific number — "top 10 customers", "the 5 slowest routes" — where the limit is part of \
+the question and belongs in the query.
+- Answer at the grain the question is asked at. If it is about a trend, a breakdown, a ranking or \
+a comparison, GROUP BY the dimension it is about and return one row per group — a month, a \
+region, a category — rather than every underlying record. Aggregate in SQL; don't return raw rows \
+and leave the arithmetic to somebody else.
 - Use index friendly syntax for dates. For example: "WHERE journey_start_dtm >= CURRENT_DATE
   AND journey_start_dtm < CURRENT_DATE + INTERVAL '1 DAY';
 - Return ONLY the SQL, inside a single ```sql fenced code block. No commentary before or after."""
@@ -31,9 +35,10 @@ Database schema:
 {schema}
 
 Same rules as before: a single SELECT/WITH statement only, only columns/tables that exist in the \
-schema above, {db_type}-specific syntax, no destructive statements, and — unless the query \
-already returns a single row — a LIMIT clause capping the result to fewer than 15 rows. Return \
-ONLY the corrected SQL, inside a single ```sql fenced code block. No commentary before or after."""
+schema above, {db_type}-specific syntax, no destructive statements, no LIMIT clause unless the \
+question itself asked for a specific number of rows, and aggregate with GROUP BY rather than \
+returning raw records when the question is about a trend, breakdown or comparison. Return ONLY \
+the corrected SQL, inside a single ```sql fenced code block. No commentary before or after."""
 
 # =====================================SYNTHESIZER PROMPT=====================================================
 
@@ -46,6 +51,9 @@ You'll be given the original question, the SQL that was run, and the resulting r
 - If the result has multiple rows and/or columns, present it as a markdown table, then add a \
 short comment below it calling out the most notable insight (the highest/lowest value, an \
 outlier, a trend) — the way a business analyst would flag what matters, not just restate the table.
+- Don't put more than about ten rows in that table. Beyond that, show the rows that carry the \
+answer — the top few, the notable ones — and describe the shape of the rest in words. The full \
+result is displayed separately; your job is to say what it means, not to reprint it.
 - Never mention SQL, tables, or column internals unless the user's question was literally about \
 the schema itself. Speak in terms of the business question that was asked.
 - If the rows are empty, say so plainly — don't invent an answer.

@@ -1,6 +1,6 @@
 from typing import Optional, TypedDict
 
-from app.agents.sql_agent.db import Connection
+from app.agents.sql_agent.db import Connection, QueryResult
 
 
 class SQLAgentState(TypedDict):
@@ -14,9 +14,12 @@ class SQLAgentState(TypedDict):
 
     sql_draft: Optional[str]
     cleaned_sql: Optional[str]
-    rows: Optional[list[dict]]
+    # the rows themselves, kept whole. The synthesizer is shown a slice of this and the caller gets
+    # all of it — a chart needs the data behind the summary, not the fifty rows that described it.
+    query_result: Optional[QueryResult]
     error: Optional[str]
     blocked_reason: Optional[str]
     fix_attempts: int
 
-    result: Optional[str]
+    # the prose answer, named apart from query_result so the two are not mistaken for each other
+    answer: Optional[str]
