@@ -4,15 +4,19 @@ import { getChat, sendChatMessage } from "../api/client";
 let nextId = 0;
 const newId = () => `msg-${Date.now()}-${nextId++}`;
 
-// `data` rides on the response, not on the message row — the rows behind an answer aren't stored
-// yet, so a reopened conversation replays the prose and the SQL but not the chart
-const toMessage = (m, data = null) => ({
+// Unary on purpose: `messages.map(toMessage)` would otherwise hand the array index to a second
+// parameter, which is a silent wrong answer rather than an error.
+//
+// `data` comes back on the message itself when a conversation is reopened, and separately on the
+// response when a turn has just run — the live copy is the full result, the stored one is trimmed
+// to a size bound, so the turn that ran shows everything it fetched.
+const toMessage = (m) => ({
   id: m.id,
   role: m.role,
   content: m.content,
   sql: m.sql,
   routedTo: m.routed_to,
-  data,
+  data: m.data ?? null,
 });
 
 /**
@@ -65,7 +69,10 @@ export function useChat({ onChatCreated, onChatUpdated } = {}) {
         const isNew = chatIdRef.current === null;
         chatIdRef.current = response.chat_id;
 
-        setMessages((prev) => [...prev, toMessage(response.message, response.data)]);
+        setMessages((prev) => [
+          ...prev,
+          { ...toMessage(response.message), data: response.data ?? null },
+        ]);
 
         if (isNew) onChatCreated?.({ id: response.chat_id, title: response.title });
         else onChatUpdated?.(response.chat_id);

@@ -57,7 +57,9 @@ async def get_chat(chat_id: uuid.UUID, user: CurrentUser, session: SessionDep) -
         connection_id=chat.connection_id,
         created_at=chat.created_at,
         updated_at=chat.updated_at,
-        messages=[MessageResponse.of(m) for m in chat.messages],
+        # with_data: this is the reopening path, and the chart is the part of an old answer worth
+        # coming back to
+        messages=[MessageResponse.of(m, with_data=True) for m in chat.messages],
     )
 
 

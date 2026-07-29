@@ -8,13 +8,14 @@ from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from pydantic import BaseModel, Field
 
 from app.agents.main_agent.main import graph
-from app.agents.visualizer.charts import ChartSpec
 from app.core.dependencies import CurrentUser
 from app.core.logging import get_logger, log_duration
 from app.db.models import Message
 from app.db.session import SessionDep
 from app.services import chats as chat_service
 from app.services import connections as connection_service
+from app.services import results as result_service
+from app.services.results import QueryData
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -33,9 +34,14 @@ class MessageResponse(BaseModel):
     sql: Optional[str] = None
     routed_to: Optional[str] = None
     created_at: datetime
+    # only filled in when a conversation is being reopened — see `of`
+    data: Optional[QueryData] = None
 
     @classmethod
-    def of(cls, message: Message) -> "MessageResponse":
+    def of(cls, message: Message, with_data: bool = False) -> "MessageResponse":
+        """`with_data` off by default so a payload is never sent twice in one response: the turn
+        that just ran carries its rows on ChatResponse.data, in full, and reading them back off the
+        row it was written to would only repeat half a megabyte."""
         return cls(
             id=message.id,
             role=message.role,
@@ -43,38 +49,8 @@ class MessageResponse(BaseModel):
             sql=message.sql,
             routed_to=message.routed_to,
             created_at=message.created_at,
+            data=result_service.from_storage(message.result_data) if with_data else None,
         )
-
-
-class ColumnInfo(BaseModel):
-    """One column's shape. The chart controls are built from this: which columns can be an axis,
-    which can be a measure, and which have too many distinct values to be either."""
-
-    name: str
-    role: str  # "temporal" | "numeric" | "categorical"
-    distinct: int
-    nulls: int
-
-
-class QueryData(BaseModel):
-    """The rows behind an answer, when the turn ran a query.
-
-    Live-only: not persisted with the message, so reopening a conversation replays the prose but
-    not the table. Charts are what make these worth keeping around, so persistence lands with them.
-    """
-
-    columns: list[str]
-    rows: list[dict]
-    row_count: int
-    # the result hit the row cap and there is likely more behind it — the client should say so
-    # rather than presenting a capped result as complete
-    truncated: bool
-    # how to draw this, when there's a chart worth drawing. Null is ordinary — most answers are a
-    # sentence, and a chart of them would be decoration.
-    chart: Optional[ChartSpec] = None
-    # sent whenever rows are, chart or not: it's what lets the client offer a different chart than
-    # the one chosen here without asking the server again
-    profile: list[ColumnInfo] = []
 
 
 class ChatResponse(BaseModel):
@@ -87,27 +63,6 @@ class ChatResponse(BaseModel):
     sql: Optional[str] = None
     data: Optional[QueryData] = None
     message: MessageResponse
-
-
-def _query_data(result: dict) -> Optional[QueryData]:
-    """None unless a query actually ran this turn — a greeting, a web lookup or a blocked write all
-    leave the state's row fields untouched."""
-    rows = result.get("result_rows")
-    if rows is None:
-        return None
-
-    profile = result.get("chart_profile")
-    return QueryData(
-        columns=result.get("result_columns") or [],
-        rows=rows,
-        row_count=len(rows),
-        truncated=bool(result.get("result_truncated")),
-        chart=result.get("chart_spec"),
-        profile=[
-            ColumnInfo(name=c.name, role=c.role, distinct=c.distinct, nulls=c.nulls)
-            for c in (profile.columns if profile else [])
-        ],
-    )
 
 
 def _to_lc_messages(history: list[Message]) -> list[AnyMessage]:
@@ -134,11 +89,20 @@ async def chat(request: ChatRequest, user: CurrentUser, session: SessionDep) -> 
             connection_id=user.active_connection_id,
         )
         history: list[Message] = []
+        prior = None
     else:
         # ownership checked here, before any LLM work — posting into someone else's chat must fail
         # fast rather than after 30 seconds of inference
         chat_row = await chat_service.get_owned_chat(session, user.id, request.chat_id)
         history = await chat_service.load_history(session, chat_row.id)
+        # The rows the last query returned, so "show that as a pie chart" has something to chart
+        # without asking the user's database the same question again.
+        #
+        # Read on every turn, including the ones that turn out not to need it, because nothing
+        # knows whether they do until the supervisor has routed — and by then the graph is running
+        # synchronously on a worker thread with no way to await a second read. One indexed lookup
+        # against our own metadata store, next to a turn that spends seconds in LLM calls.
+        prior = result_service.from_storage(await chat_service.load_last_result(session, chat_row.id))
 
     with log_duration("Total query completion"):
         # the graph is sync and spends most of its time in blocking LLM/driver calls, so it runs on
@@ -148,6 +112,7 @@ async def chat(request: ChatRequest, user: CurrentUser, session: SessionDep) -> 
             {
                 "chat_history": _to_lc_messages(history),
                 "db_context": db_context,
+                "prior_result": result_service.to_query_result(prior) if prior else None,
                 "question": request.message,
                 "refined_query": "",
                 "next": "",
@@ -167,6 +132,8 @@ async def chat(request: ChatRequest, user: CurrentUser, session: SessionDep) -> 
     routed_to = result.get("next") or "respond"
     logger.info("routed_to=%s", routed_to)
 
+    data = result_service.query_data(result)
+
     # committed only now: a failure above leaves no half-written turn, and an abandoned new chat
     # leaves no empty row
     _, assistant = await chat_service.append_turn(
@@ -176,6 +143,7 @@ async def chat(request: ChatRequest, user: CurrentUser, session: SessionDep) -> 
         answer=result["final_answer"],
         sql=result.get("final_sql"),
         routed_to=routed_to,
+        result_data=result_service.for_storage(data),
     )
 
     return ChatResponse(
@@ -184,6 +152,6 @@ async def chat(request: ChatRequest, user: CurrentUser, session: SessionDep) -> 
         reply=assistant.content,
         routed_to=routed_to,
         sql=assistant.sql,
-        data=_query_data(result),
+        data=data,
         message=MessageResponse.of(assistant),
     )

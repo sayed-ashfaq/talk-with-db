@@ -34,7 +34,12 @@ We're designing this piece by piece — agree on a step, build it, test it, then
 - [x] Schema introspection was doing an N+1 round trip per table (`get_columns`/`get_pk_constraint`/`get_foreign_keys` called separately for every table) — fine on localhost, ~70s over a real WAN link. Switched to SQLAlchemy 2.0's bulk reflection (`get_multi_columns` etc.) — flat ~6 queries regardless of table count instead of `~4-5 × N`. Verified against the same slow remote DB: ~70s → ~10s.
 - [x] Fixed a Groq structured-output failure: the supervisor's `Decision.resolved` field was `bool`, and the model occasionally emitted `"resolved": "true"` (a JSON string) instead of a JSON boolean — Groq validates tool-call arguments server-side and rejects the whole request with a 400 before it reaches our code, so no amount of handling on our end could catch/coerce it after the fact. Changed the field to `Literal["yes", "no"]` (a string enum), which sidesteps the boolean-vs-string-boolean ambiguity entirely. Also added a catch-all `Exception` handler in `main.py` as a safety net for any future unhandled failure from an external API call — logs and returns a clean 500 instead of a bare traceback.
 - [ ] `knowledge_agent` for real — Tavily + optional DB access. **Next up.**
-- [ ] `python_agent` for real — matplotlib chart generation.
+- [x] Visualization, as a declarative chart spec rather than generated code:
+  - `agents/visualizer/` profiles a result by shape (`profile.py`), derives every chart it can honestly support (`charts.py`), and asks a model only which of those best answers the question — picking by *index*, so a hallucinated column name isn't something to catch afterwards, it's something that can't be expressed. Nothing is executed: the spec crosses the API as JSON and React draws it, so there is no sandbox to escape.
+  - Runs in parallel with response synthesis inside `sql_agent` (a list-returning conditional edge), so a chart costs no wall-clock time.
+  - The row cap moved off the model: it no longer writes `LIMIT` to keep results small — `sql.apply_row_cap` enforces 5000 in the SQL text, the synthesizer sees the first 50, and the client gets all of them.
+  - `python_agent` is gone. It was replaced by `visualizer`, which re-charts rows an earlier turn already fetched ("show that as a pie chart") instead of re-running the query — same rules, same model call, no second trip to the user's database.
+  - Results are stored on the message (`messages.result_data`, JSONB, trimmed to a 256 KB budget by even-stride sampling), so a reopened conversation shows its charts rather than just its prose.
 - [ ] **Experimental, not wired in:** `agents/sql_agent/schema_graph.py` — graph-based schema linking, as an alternative to dumping the full schema into every prompt. Tables → nodes, FKs → edges (`networkx`), built once per connection like the existing schema fetch. Per question: LLM extracts entities → local embeddings (`fastembed`, `BAAI/bge-small-en-v1.5`) match entities to anchor tables → graph traversal (shortest path / Steiner tree) connects the anchors, surfacing join-path tables the question never named → LLM renders just that narrow slice into a minimal schema block. Tested live against the 15-table prod schema: a question naming only "stations" and "vehicles" correctly pulled in `inspection_entity` as the connecting table purely from FK structure, with no textual hint of it in the question. Found and fixed two real bugs while building it: the context-builder was redundantly re-running graph traversal on its own output instead of using the already-computed edges, and the Steiner-tree path crashed on an unrelated disconnected table (`migrations`) elsewhere in the same schema — fixed by restricting traversal to the connected component containing the anchors. Not connected to `agents.py`'s actual generation flow, which still uses the full `schema_text` — this is a standalone prototype to evaluate before deciding whether to integrate it.
 
 ## The pipeline
@@ -125,7 +130,7 @@ The main agent is a **supervisor** over specialist sub-agents, not a single fixe
 
 - `sql_agent` — NL2SQL against the connected Postgres/MySQL database. **Current build priority.**
 - `knowledge_agent` — web search (Tavily) and/or the connected database for lookups that aren't a SQL query. Buffer for now.
-- `python_agent` — turns data into charts (matplotlib). Buffer for now.
+- `visualizer` — re-draws an earlier turn's result as a different chart, from the rows already fetched. (Charts on fresh queries are produced inside `sql_agent`, alongside the answer.)
 - direct response — greetings, meta questions, anything needing no specialist.
 
 More specialists (e.g. a research agent) can be added later as additional routes without changing this shape. The "pipeline" diagram above describes what happens *inside* `sql_agent` once it's built for real — that's still the plan for that node specifically.
@@ -151,7 +156,7 @@ backend/
         ├── main_agent/
         │   ├── __init__.py
         │   ├── state.py           # top-level graph state (messages, next) — shared across all agents
-        │   └── main.py             # supervisor + direct-answer nodes, AND connects sql_agent/knowledge_agent/python_agent into one graph
+        │   └── main.py             # supervisor + direct-answer nodes, AND connects sql_agent/knowledge_agent/visualizer into one graph
         ├── sql_agent/
         │   ├── __init__.py
         │   ├── state.py            # sql_agent's own internal state — attempt count, generated_sql, last error, etc.
@@ -161,9 +166,11 @@ backend/
         ├── knowledge_agent/
         │   ├── __init__.py
         │   └── agent.py             # stub node — folder now for consistency, minimal content until built for real
-        └── python_agent/
+        └── visualizer/
             ├── __init__.py
-            └── agent.py             # stub node, same story
+            ├── profile.py           # what a result looks like — column roles, cardinality, ranges
+            ├── charts.py             # which charts the shape supports, and the model call that picks one
+            └── agent.py              # re-charts a previous turn's rows, without re-running the query
 ```
 
 Notes:

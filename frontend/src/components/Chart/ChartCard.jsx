@@ -65,6 +65,11 @@ export default function ChartCard({ data }) {
 
   const { keys, colorOf, sampled, total } = buildChartData(spec, data.rows, theme.series);
 
+  // fewer rows than the query returned means this answer was reopened and what came back is the
+  // evenly-spaced sample kept with it. The chart looks the same either way, but a table showing 200
+  // rows drawn from across the result is a different claim than the first 200, so it gets said.
+  const isStoredSample = data.rows.length < data.row_count;
+
   return (
     <section className={styles.card}>
       <header className={styles.header}>
@@ -109,10 +114,15 @@ export default function ChartCard({ data }) {
 
           <ChartControls spec={spec} profile={data.profile} onChange={setSpec} />
 
-          {(sampled || data.truncated) && (
+          {(sampled || isStoredSample || data.truncated) && (
             <p className={styles.note}>
+              {/* outermost fact first: what was kept, then what is drawn from it */}
+              {isStoredSample &&
+                `${data.rows.length.toLocaleString()} of the ${data.row_count.toLocaleString()} rows the query returned were kept with this answer, spread evenly across it. `}
               {sampled &&
-                `Plotting ${MAX_PLOTTED_POINTS.toLocaleString()} points evenly spaced across ${total.toLocaleString()}. `}
+                (isStoredSample
+                  ? `Plotting ${MAX_PLOTTED_POINTS.toLocaleString()} points of those, evenly spaced. `
+                  : `Plotting ${MAX_PLOTTED_POINTS.toLocaleString()} points evenly spaced across ${total.toLocaleString()}. `)}
               {data.truncated && `The query returned more rows than the ${data.row_count.toLocaleString()}-row cap.`}
             </p>
           )}

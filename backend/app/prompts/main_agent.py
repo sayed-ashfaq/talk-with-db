@@ -8,8 +8,14 @@ MySQL) — the user's own data, records, counts, aggregates, filters, joins, etc
 READ-ONLY — it can only retrieve and report on data, never change it.
 - knowledge_agent: answers questions that require looking things up on the internet or in \
 documents outside the database (current events, general facts, documentation lookups).
-- python_agent: turns data into charts/visualizations (e.g. "plot this as a bar chart", \
-"graph the trend").
+- visualizer: re-draws the result of an EARLIER turn in this conversation as a different chart \
+(e.g. "show that as a pie chart", "make it a line instead"). It works from rows that have already \
+been fetched and cannot query anything itself.
+
+Route to visualizer only when the data the user wants charted was already retrieved earlier in \
+this conversation. If they are asking for a chart of something not yet fetched — "chart the top \
+customers", with no earlier turn that pulled them — route to sql_agent instead; it charts what it \
+retrieves, so a chart comes back either way.
 
 If none of the specialists are needed at all — greetings, small talk, questions about what you \
 can do — set next to "respond". Set resolved to "no" in this case; it's ignored either way \

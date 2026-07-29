@@ -225,11 +225,18 @@ def _choose(question: str, profile: ResultProfile, options: list[Candidate], row
     return _spec(candidate, choice.title, choice.reason, narrowed or None)
 
 
-def select(question: str, result: QueryResult) -> tuple[Optional[ChartSpec], ResultProfile]:
+def select(
+    question: str, result: QueryResult, always_ask: bool = False
+) -> tuple[Optional[ChartSpec], ResultProfile]:
     """The chart for this result, if there is one worth drawing.
 
     Returns the profile either way — the frontend needs to know which columns are measures and
     which are labels in order to offer the user a different chart than the one chosen here.
+
+    `always_ask` keeps the model in the loop even when the rules leave only one option. Worth a
+    round trip when the user asked for a particular chart by name: they are owed either the chart
+    they asked for or a decline, and handing them a different one without comment answers a
+    question they didn't ask.
     """
     profile = profile_result(result)
     options = candidates(profile)
@@ -238,7 +245,7 @@ def select(question: str, result: QueryResult) -> tuple[Optional[ChartSpec], Res
         logger.info("no chart candidates for a %d-row result", profile.row_count)
         return None, profile
 
-    if len(options) == 1:
+    if len(options) == 1 and not always_ask:
         # nothing to deliberate over, so nothing worth a round trip to a model — the rules already
         # decided this is both possible and the only possibility
         only = options[0]

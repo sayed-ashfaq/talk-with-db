@@ -1,7 +1,8 @@
 import styles from "./ExampleChart.module.css";
 
-// illustrative only — python_agent doesn't produce real charts yet (see REQUIREMENTS.md), this
-// is just a stand-in so the homepage can show what that will eventually look like
+// Decorative, and hard-coded on purpose: the signed-out homepage has no connection, no query and
+// no data, so this is a drawing of the product rather than an instance of it. Real charts come
+// from ChartCard, off a spec the server sends.
 const VALUES = [30, 42, 38, 55, 61, 74];
 const MONTHS = ["Feb", "Mar", "Apr", "May", "Jun", "Jul"];
 const BAR_WIDTH = 24;

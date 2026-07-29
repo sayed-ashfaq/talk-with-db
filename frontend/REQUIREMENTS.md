@@ -20,16 +20,16 @@ A simple web UI for the NL2SQL assistant: connect to a database, ask questions i
 3. **Per-message rendering** — each agent reply is one of three shapes, and the UI must handle all three:
    - **Plain answer only** — just render the LLM's natural-language response. This is the default/common case.
    - **Answer + generated SQL** — render the natural-language answer, plus the **SQL toggle** — see [Generated SQL toggle](#generated-sql-toggle) below. Don't show the SQL toggle at all if no SQL was generated for that message.
-   - **Answer + chart** — render the natural-language answer, plus the chart (from python_agent). Don't reserve chart space if no chart was generated.
+   - **Answer + chart** — render the natural-language answer, plus the chart described by `data.chart`. Don't reserve chart space if no chart was generated.
 4. **Loading state** while waiting on a reply — LLM calls can take a few seconds, don't leave the UI looking frozen.
 5. **Error state** if the request fails (network error or non-2xx) — show a readable message, don't swallow it silently.
 
-## API contract (current — will evolve as knowledge_agent/python_agent become real)
+## API contract (current — will evolve as knowledge_agent becomes real)
 
 ```
 POST /chat
   request:  { "message": string, "history"?: [{ "role": "user"|"assistant", "content": string }] }
-  response: { "reply": string, "routed_to": "sql_agent" | "knowledge_agent" | "python_agent" | "respond",
+  response: { "reply": string, "routed_to": "sql_agent" | "knowledge_agent" | "visualizer" | "respond",
               "sql": string | null, "history": [...] }
 
 POST   /connections                  { "name", "db_type", "host"?, "port"?, "user"?, "password"?, "dbname"?, "url"? } -> { "id", "name", "db_type", "dbname" }
@@ -40,9 +40,22 @@ DELETE /connections/{id}             -> { "deleted": id }
 GET    /connections/schema?schema_type=plain|graph -> { "schema_type": "plain"|"graph", "schema_text": string }
 ```
 
-`sql` is live now: whenever `routed_to` is `sql_agent` **and** a query actually executed successfully, `sql` is the exact (cleaned/formatted) SQL that ran. It's `null` for every other case — plain conversational replies, knowledge_agent/python_agent responses, and sql_agent attempts that got blocked (write/destructive query refused) or gave up after retries. Key the SQL toggle off the presence of this field, not off `routed_to` alone.
+`sql` is live now: whenever `routed_to` is `sql_agent` **and** a query actually executed successfully, `sql` is the exact (cleaned/formatted) SQL that ran. It's `null` for every other case — plain conversational replies, knowledge_agent/visualizer responses, and sql_agent attempts that got blocked (write/destructive query refused) or gave up after retries. Key the SQL toggle off the presence of this field, not off `routed_to` alone.
 
-`chart` is **not** implemented yet — python_agent is still a stub (see its `agent_output` text, which says so literally). Don't build chart rendering against a guessed shape; confirm the exact `chart` field/shape with backend once python_agent is real. For now, "Answer + chart" in point 3 above has nothing to trigger it — treat it as a documented future case, not something to wire up today.
+`data` is live now, and carries the rows behind an answer whenever a query ran:
+
+```
+data: {
+  columns: string[], rows: object[], row_count: number, truncated: boolean,
+  chart: { type: "bar"|"line"|"area"|"pie"|"scatter", x: string, y: string[],
+           series: string | null, title: string, reason: string } | null,
+  profile: [{ name, role: "temporal"|"numeric"|"categorical", distinct, nulls }]
+} | null
+```
+
+The chart is **described, not drawn**: nothing here is code, and the client renders it. `chart` is null far more often than not — most answers are a sentence, and a chart of one is decoration — so key the chart card off `data.chart`, never off the presence of `data`. `profile` ships whenever rows do, chart or not: it's what lets the client offer a different chart than the one chosen server-side without asking again.
+
+`rows` can be shorter than `row_count`. That means the payload was reopened from storage and trimmed to a size budget by even-stride sampling — say so in the UI rather than presenting a sample as the whole result.
 
 ## Explicit non-goals right now
 

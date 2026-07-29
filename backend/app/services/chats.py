@@ -78,6 +78,19 @@ async def load_history(session: AsyncSession, chat_id: uuid.UUID) -> list[Messag
     return list(reversed(rows))
 
 
+async def load_last_result(session: AsyncSession, chat_id: uuid.UUID) -> Optional[dict]:
+    """The most recent turn's rows, for a follow-up that wants to re-chart them rather than ask the
+    database again. Most turns store nothing, so this looks past them rather than only at the last
+    message — "make that a pie chart" after a couple of conversational replies still finds its data.
+    """
+    return await session.scalar(
+        select(Message.result_data)
+        .where(Message.chat_id == chat_id, Message.result_data.isnot(None))
+        .order_by(Message.seq.desc())
+        .limit(1)
+    )
+
+
 async def append_turn(
     session: AsyncSession,
     chat: Chat,
@@ -85,6 +98,7 @@ async def append_turn(
     answer: str,
     sql: Optional[str] = None,
     routed_to: Optional[str] = None,
+    result_data: Optional[dict] = None,
 ) -> list[Message]:
     """Write a question and its answer as one unit.
 
@@ -104,6 +118,7 @@ async def append_turn(
             content=answer,
             sql=sql,
             routed_to=routed_to,
+            result_data=result_data,
         ),
     ]
     session.add_all(messages)

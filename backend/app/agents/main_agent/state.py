@@ -3,7 +3,7 @@ from typing import Annotated, Optional, TypedDict
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 
-from app.agents.sql_agent.db import DbContext
+from app.agents.sql_agent.db import DbContext, QueryResult
 from app.agents.visualizer.charts import ChartSpec
 from app.agents.visualizer.profile import ResultProfile
 
@@ -16,6 +16,12 @@ class AgentState(TypedDict):
     # None when the user has no active connection.
     db_context: Optional[DbContext]
 
+    # what the last query in this conversation returned, read back from the stored turn by the
+    # router — same reason db_context is resolved there: the graph is synchronous and can't await a
+    # database of our own. This is what lets "show that as a pie chart" answer from the rows the
+    # user already has, instead of asking their database the same question twice.
+    prior_result: Optional[QueryResult]
+
     question: str
     refined_query: str
     next: str
@@ -27,7 +33,7 @@ class AgentState(TypedDict):
     #
     # Every specialist overwrites agent_output and finalize hands whichever one ran last to the
     # user, so anything that has to survive a second hop cannot live in that field — route
-    # sql_agent -> python_agent through it and the SQL answer is gone by the time the user sees a
+    # sql_agent -> visualizer through it and the SQL answer is gone by the time the user sees a
     # chart. These stay put until another query replaces them.
     #
     # Deliberately never shown to the supervisor: its decision context is built from prose, and a

@@ -90,6 +90,16 @@ class Message(Base):
     sql: Mapped[str | None] = mapped_column(Text, nullable=True)
     routed_to: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
+    # assistant turns that ran a query: the rows behind the answer, in the same shape the API sends
+    # them — columns, rows, the chart chosen for them, and the profile the chart controls are built
+    # from. Stored because a chart is the part of an answer worth coming back to, and re-running the
+    # query on open would be both slow and a lie: the numbers would be today's, under yesterday's
+    # prose. Trimmed to a size bound before it gets here; see results.for_storage.
+    #
+    # JSONB rather than Text so this stays queryable later (which turns had charts, of what type)
+    # without a migration to go looking.
+    result_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     chat: Mapped["Chat"] = relationship(back_populates="messages")

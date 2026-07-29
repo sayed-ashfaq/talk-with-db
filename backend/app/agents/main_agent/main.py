@@ -8,15 +8,15 @@ from pydantic import BaseModel
 
 from app.agents.knowledge_agent.agent import knowledge_agent_node
 from app.agents.main_agent.state import AgentState
-from app.agents.python_agent.agent import python_agent_node
 from app.agents.sql_agent.agents import sql_agent_node
+from app.agents.visualizer.agent import visualizer_node
 from app.core.llm import get_llm
 from app.core.logging import log_duration
 from app.prompts.main_agent import RESPOND_PROMPT, SYSTEM_PROMPT
 
 MAX_ATTEMPTS = 3
 
-ROUTES = Literal["sql_agent", "knowledge_agent", "python_agent", "respond"]
+ROUTES = Literal["sql_agent", "knowledge_agent", "visualizer", "respond"]
 
 
 class Decision(BaseModel):
@@ -35,7 +35,7 @@ def _decision_context(state: AgentState) -> list[AnyMessage]:
 
 def supervisor_node(
     state: AgentState,
-) -> Command[Literal["sql_agent", "knowledge_agent", "python_agent", "responder", "finalize"]]:
+) -> Command[Literal["sql_agent", "knowledge_agent", "visualizer", "responder", "finalize"]]:
     attempted = state.get("agent_output") is not None
 
     if attempted and state.get("attempts", 0) >= MAX_ATTEMPTS:
@@ -80,14 +80,14 @@ def build_graph():
     graph.add_node("supervisor", supervisor_node)
     graph.add_node("sql_agent", sql_agent_node)
     graph.add_node("knowledge_agent", knowledge_agent_node)
-    graph.add_node("python_agent", python_agent_node)
+    graph.add_node("visualizer", visualizer_node)
     graph.add_node("responder", responder_node)
     graph.add_node("finalize", finalize_node)
 
     graph.add_edge(START, "supervisor")
     graph.add_edge("sql_agent", "supervisor")
     graph.add_edge("knowledge_agent", "supervisor")
-    graph.add_edge("python_agent", "supervisor")
+    graph.add_edge("visualizer", "supervisor")
     graph.add_edge("responder", "finalize")
     graph.add_edge("finalize", END)
 

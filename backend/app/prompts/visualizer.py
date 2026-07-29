@@ -11,6 +11,10 @@ Pick the one that answers the question best, and return its number as a JSON str
 this year" wants the trend over time. "Which region sold most" wants the comparison across \
 regions. "What share of orders came from each channel" wants the proportions.
 - Prefer the simpler chart when two would work equally well.
+- If the question asks for a particular kind of chart and no option is that kind, that chart is \
+not possible for this data. Pick the closest one that is, and say so in `reason` — "a line needs \
+a time axis and this result has none" — rather than switching silently and letting the user think \
+they got what they asked for. Return -1 if nothing here is a reasonable substitute.
 - Return -1 if none of them would tell the user anything the numbers don't already say — a result \
 with two rows, or one where the interesting part is a single figure, is better read as a table. \
 Declining is a valid answer and is better than a chart nobody needed.
