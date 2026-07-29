@@ -4,12 +4,15 @@ import { getChat, sendChatMessage } from "../api/client";
 let nextId = 0;
 const newId = () => `msg-${Date.now()}-${nextId++}`;
 
-const toMessage = (m) => ({
+// `data` rides on the response, not on the message row — the rows behind an answer aren't stored
+// yet, so a reopened conversation replays the prose and the SQL but not the chart
+const toMessage = (m, data = null) => ({
   id: m.id,
   role: m.role,
   content: m.content,
   sql: m.sql,
   routedTo: m.routed_to,
+  data,
 });
 
 /**
@@ -62,7 +65,7 @@ export function useChat({ onChatCreated, onChatUpdated } = {}) {
         const isNew = chatIdRef.current === null;
         chatIdRef.current = response.chat_id;
 
-        setMessages((prev) => [...prev, toMessage(response.message)]);
+        setMessages((prev) => [...prev, toMessage(response.message, response.data)]);
 
         if (isNew) onChatCreated?.({ id: response.chat_id, title: response.title });
         else onChatUpdated?.(response.chat_id);
