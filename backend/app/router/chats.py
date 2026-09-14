@@ -24,6 +24,7 @@ class ChatSummary(BaseModel):
     id: uuid.UUID
     title: str
     connection_id: Optional[uuid.UUID] = None
+    section: str
     message_count: int
     created_at: datetime
     updated_at: datetime
@@ -33,6 +34,7 @@ class ChatDetail(BaseModel):
     id: uuid.UUID
     title: str
     connection_id: Optional[uuid.UUID] = None
+    section: str
     created_at: datetime
     updated_at: datetime
     messages: list[MessageResponse]
@@ -55,6 +57,7 @@ async def get_chat(chat_id: uuid.UUID, user: CurrentUser, session: SessionDep) -
         id=chat.id,
         title=chat.title,
         connection_id=chat.connection_id,
+        section=chat.section,
         created_at=chat.created_at,
         updated_at=chat.updated_at,
         # with_data: this is the reopening path, and the chart is the part of an old answer worth

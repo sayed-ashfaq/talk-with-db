@@ -54,8 +54,9 @@ async def create_chat(
     user_id: uuid.UUID,
     title: str,
     connection_id: Optional[uuid.UUID] = None,
+    section: str = "database",
 ) -> Chat:
-    chat = Chat(user_id=user_id, title=title, connection_id=connection_id)
+    chat = Chat(user_id=user_id, title=title, connection_id=connection_id, section=section)
     session.add(chat)
     await session.flush()  # assigns the id without ending the caller's transaction
     return chat
@@ -138,6 +139,7 @@ def _summary(chat: Chat, message_count: int) -> dict:
         "id": chat.id,
         "title": chat.title,
         "connection_id": chat.connection_id,
+        "section": chat.section,
         "message_count": message_count,
         "created_at": chat.created_at,
         "updated_at": chat.updated_at,

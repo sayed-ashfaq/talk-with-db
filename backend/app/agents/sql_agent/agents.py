@@ -1,7 +1,7 @@
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
-from app.agents.main_agent.state import AgentState
+from app.agents.database_agent.state import DatabaseAgentState
 from app.agents.sql_agent import db, sql
 from app.agents.visualizer import charts
 from app.agents.sql_agent.state import SQLAgentState
@@ -146,7 +146,7 @@ def _build_subgraph():
 _subgraph = _build_subgraph()
 
 
-def sql_agent_node(state: AgentState) -> dict:
+def sql_agent_node(state: DatabaseAgentState) -> dict:
     context = state.get("db_context")
     if context is None:
         raise NoActiveConnectionError

@@ -21,12 +21,17 @@ class Settings(BaseSettings):
     # groq is selected, rather than failing at import time for setups that only use local models
     groq_api_key: Optional[str] = None
 
-    # one model id per agent, so each can be tuned independently
-    main_agent_model: str = "llama-3.3-70b-versatile"
+    # one model id per agent, so each can be tuned independently. Was "llama-3.3-70b-versatile" for
+    # main_agent/visualizer, which Groq has since deprecated (confirmed via /v1/models — a 404 on
+    # every call, unrelated to the agent split); swapped to a model currently live on the account.
+    main_agent_model: str = "openai/gpt-oss-20b"
     sql_agent_model: str = "openai/gpt-oss-120b"
     # picks between pre-validated chart options — a small judgement call on a short prompt, so it
     # has no use for a larger model than this
-    visualizer_model: str = "llama-3.3-70b-versatile"
+    visualizer_model: str = "openai/gpt-oss-20b"
+    # picks/parameterizes a pandas op plan from a fixed vocabulary — same structured-generation
+    # shape as sql_agent, so it defaults to the same model
+    analytics_agent_model: str = "openai/gpt-oss-120b"
 
     # --- local LLM (only used when llm_provider="local") --------------------------------------
 
@@ -36,6 +41,7 @@ class Settings(BaseSettings):
     local_main_agent_model: Optional[str] = None
     local_sql_agent_model: Optional[str] = None
     local_visualizer_model: Optional[str] = None
+    local_analytics_agent_model: Optional[str] = None
 
     # app's own metadata store (saved DB connections), separate from any target DB
     metadata_database_url: str

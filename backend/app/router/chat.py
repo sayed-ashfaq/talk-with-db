@@ -7,7 +7,8 @@ from fastapi import APIRouter
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 from pydantic import BaseModel, Field
 
-from app.agents.main_agent.main import graph
+from app.agents.database_agent.main import graph as database_graph
+from app.agents.general_agent.main import graph as general_graph
 from app.core.dependencies import CurrentUser
 from app.core.logging import get_logger, log_duration
 from app.db.models import Message
@@ -25,6 +26,10 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
     # omit to start a new conversation — the response carries the id to use from then on
     chat_id: Optional[uuid.UUID] = None
+    # only meaningful when chat_id is omitted — an existing chat's section is fixed at creation,
+    # same as connection_id. Which top-level agent handles this conversation, chosen by the
+    # frontend's section switcher, never by an LLM classifier.
+    section: Literal["database", "general"] = "database"
 
 
 class MessageResponse(BaseModel):
@@ -76,17 +81,13 @@ def _to_lc_messages(history: list[Message]) -> list[AnyMessage]:
 async def chat(request: ChatRequest, user: CurrentUser, session: SessionDep) -> ChatResponse:
     logger.info("user %s: %s", user.id, request.message)
 
-    # Resolved here, not inside the SQL agent: the agent graph is synchronous and can neither await
-    # the annotations read nor rebuild a connection. Stays None when the user has nothing active —
-    # plenty of questions never reach the SQL agent, and those must still work without a connection.
-    db_context = await connection_service.get_active_db_context(session, user)
-
     if request.chat_id is None:
         chat_row = await chat_service.create_chat(
             session,
             user.id,
             title=chat_service.derive_title(request.message),
-            connection_id=user.active_connection_id,
+            connection_id=user.active_connection_id if request.section == "database" else None,
+            section=request.section,
         )
         history: list[Message] = []
         prior = None
@@ -104,30 +105,56 @@ async def chat(request: ChatRequest, user: CurrentUser, session: SessionDep) -> 
         # against our own metadata store, next to a turn that spends seconds in LLM calls.
         prior = result_service.from_storage(await chat_service.load_last_result(session, chat_row.id))
 
+    section = chat_row.section
+
+    # Resolved here, not inside the agent graph: the graph is synchronous and can neither await the
+    # annotations read nor rebuild a connection. Only resolved for a "database" chat — a "general"
+    # chat's state never receives a db_context at all, which is what makes "the General agent can't
+    # see DB data" a structural fact rather than a prompt asking it not to look.
+    db_context = (
+        await connection_service.get_active_db_context(session, user) if section == "database" else None
+    )
+
+    lc_history = _to_lc_messages(history)
+
     with log_duration("Total query completion"):
-        # the graph is sync and spends most of its time in blocking LLM/driver calls, so it runs on
-        # a worker thread rather than stalling the event loop for the whole turn
-        result = await asyncio.to_thread(
-            graph.invoke,
-            {
-                "chat_history": _to_lc_messages(history),
-                "db_context": db_context,
-                "prior_result": result_service.to_query_result(prior) if prior else None,
-                "question": request.message,
-                "refined_query": "",
-                "next": "",
-                "agent_output": None,
-                "agent_sql": None,
-                "attempts": 0,
-                "result_rows": None,
-                "result_columns": None,
-                "result_truncated": False,
-                "chart_spec": None,
-                "chart_profile": None,
-                "final_answer": None,
-                "final_sql": None,
-            },
-        )
+        # both graphs are sync and spend most of their time in blocking LLM/driver calls, so they
+        # run on a worker thread rather than stalling the event loop for the whole turn
+        if section == "database":
+            result = await asyncio.to_thread(
+                database_graph.invoke,
+                {
+                    "chat_history": lc_history,
+                    "db_context": db_context,
+                    "prior_result": result_service.to_query_result(prior) if prior else None,
+                    "question": request.message,
+                    "refined_query": "",
+                    "next": "",
+                    "agent_output": None,
+                    "agent_sql": None,
+                    "attempts": 0,
+                    "result_rows": None,
+                    "result_columns": None,
+                    "result_truncated": False,
+                    "chart_spec": None,
+                    "chart_profile": None,
+                    "final_answer": None,
+                    "final_sql": None,
+                },
+            )
+        else:
+            result = await asyncio.to_thread(
+                general_graph.invoke,
+                {
+                    "chat_history": lc_history,
+                    "question": request.message,
+                    "refined_query": "",
+                    "next": "",
+                    "agent_output": None,
+                    "attempts": 0,
+                    "final_answer": None,
+                },
+            )
 
     routed_to = result.get("next") or "respond"
     logger.info("routed_to=%s", routed_to)

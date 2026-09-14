@@ -44,6 +44,14 @@ class Chat(Base):
         UUID(as_uuid=True), ForeignKey("saved_connections.id", ondelete="SET NULL"), nullable=True
     )
 
+    # "database" | "general" — which top-level agent this conversation belongs to, fixed at
+    # creation like connection_id is. Not an LLM routing decision: the frontend's section picker
+    # sets this once, and app/router/chat.py dispatches on it directly. A "general" chat never gets
+    # a db_context built for it at all (see get_active_db_context's caller in chat.py) — the
+    # privacy boundary between the two agents is structural, not just a prompt telling one agent
+    # not to look at the other's data.
+    section: Mapped[str] = mapped_column(String(16), server_default="database")
+
     title: Mapped[str] = mapped_column(String(255))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
