@@ -1,26 +1,51 @@
 # NL2SQL Streamlit Tester
 
-A quick Streamlit UI for manually testing the backend — not the real product frontend (that's planned as React in `../frontend`, see `frontend/REQUIREMENTS.md`). This is a dev tool.
+A dev UI for manually testing the backend's split Database/General agents — not the real product
+frontend (that's the React app in `../frontend`). Two pages, one per top-level agent, matching the
+backend's `section` split (`app/agents/database_agent`, `app/agents/general_agent`).
+
+Everything here goes through the real HTTP API (`api_client.py`) — no backend code is imported
+directly, including auth: `POST /auth/login`/`/auth/signup` against a fixed dev account, so there's
+no login screen but the same session-cookie auth the real frontend uses is still exercised.
 
 ## Run
 
-Backend must already be running (see `../backend/dev-notes/testing-the-api.md`). Then:
+Backend must already be running (`cd ../backend && uv run python main.py`, or however you normally
+start it). Then:
 
 ```bash
 cd streamlit_app
 uv run streamlit run app.py --server.port 8510
 ```
 
-Port 8501 (Streamlit's default) is often taken by an unrelated project on this machine — 8510 is used above to avoid the clash; pick any free port.
+Port 8501 (Streamlit's default) is often taken by an unrelated project on this machine — 8510 avoids
+the clash. Open the printed local URL.
 
-Open the printed local URL. If the backend isn't at `http://localhost:8010`, either set `NL2SQL_BACKEND_URL` before launching or change the "Backend URL" field in the sidebar at runtime.
+Config, all via env var or the sidebar "Backend URL" field at runtime:
+
+| Env var | Default | What |
+|---|---|---|
+| `NL2SQL_BACKEND_URL` | `http://localhost:8080` | where the API is |
+| `STREAMLIT_DEV_EMAIL` | `streamlit-tester@nl2sql-tester.internal` | dev account this tool logs in/signs up as |
+| `STREAMLIT_DEV_PASSWORD` | `streamlit-dev-only-12345` | its password — local dev only, not a real secret |
 
 ## What it does
 
-- **Sidebar** — save a new DB connection (structured fields or a raw connection URL, matching `POST /connections`), see all saved connections with which one is active, switch (`Use`) or remove (`✕`) one.
-- **Main area** — gated: shows a prompt to connect until a connection is active, then a normal chat interface (`st.chat_message`/`st.chat_input`) wired to `POST /chat`. Each reply is tagged with which agent handled it (`routed_to`) — useful for debugging routing decisions.
-- History round-trips through the backend exactly as the API expects (stateless server, client resends `history` each turn) — this UI is also a reference for how a real frontend should call `/chat`.
+- **Database page** — sidebar: save a connection (structured fields or a raw URL, `POST
+  /connections`), see saved connections with which is active, switch (`Use`) or remove (`✕`) one; a
+  list of this section's past chats (`GET /chats`, filtered client-side on `section`). Main area: a
+  normal chat (`st.chat_message`/`st.chat_input`) against `POST /chat` with `section: "database"`.
+  Each assistant reply shows which specialist handled it (`routed_to`), a collapsed SQL block when
+  one ran, a Plotly chart when the backend returned one (`charts.py` renders the same `ChartSpec` the
+  real frontend will), and the underlying rows in an expander.
+- **General page** — same chat mechanics, `section: "general"`, no connection sidebar. Chit-chat and
+  drafting help today; renders whatever `sql`/`data` a turn comes back with, so it needs no changes
+  once RAG/CSV analytics land as specialists there.
+- Both pages persist chats server-side (`chat_id`, same as the real frontend) rather than resending a
+  client-held history — reopening a past chat re-fetches it via `GET /chats/{id}`.
 
 ## Note
 
-The active connection is backend-global, not per-browser-session (matches how the backend actually works — see `frontend/REQUIREMENTS.md`'s non-goals). If you and someone else both point a UI at the same backend, switching connections affects both.
+The active DB connection is per-signed-in-user on the backend (not global) — since this tool always
+signs in as the same fixed dev account, multiple browser tabs pointed at the same backend share one
+active connection and chat list, same as two tabs of any normal logged-in app would.
