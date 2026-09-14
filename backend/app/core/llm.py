@@ -2,15 +2,41 @@ from langchain_groq import ChatGroq
 
 from app.core.config import settings
 
-_AGENT_MODELS = {
+_GROQ_MODELS = {
     "main_agent": settings.main_agent_model,
     "sql_agent": settings.sql_agent_model,
     "visualizer": settings.visualizer_model,
 }
 
+# falls back to the groq model name when a local override isn't set, so a partial local setup
+# doesn't need every agent pinned before it's usable
+_LOCAL_MODELS = {
+    "main_agent": settings.local_main_agent_model or settings.main_agent_model,
+    "sql_agent": settings.local_sql_agent_model or settings.sql_agent_model,
+    "visualizer": settings.local_visualizer_model or settings.visualizer_model,
+}
 
-def get_llm(agent: str, **kwargs) -> ChatGroq:
-    model = _AGENT_MODELS.get(agent)
+
+def get_llm(agent: str, **kwargs):
+    """One factory for every agent's model, switched by `settings.llm_provider` rather than by call
+    site. Swapping to a local/on-prem model later is a config change here, not a change in every
+    agent that calls this.
+    """
+    if settings.llm_provider == "local":
+        model = _LOCAL_MODELS.get(agent)
+        if model is None:
+            raise ValueError(f"No local model configured for agent '{agent}'")
+        # imported lazily so a groq-only setup never needs langchain-ollama installed
+        from langchain_ollama import ChatOllama
+
+        return ChatOllama(model=model, base_url=settings.local_llm_base_url, **kwargs)
+
+    if settings.llm_provider != "groq":
+        raise ValueError(f"Unknown llm_provider '{settings.llm_provider}' (expected 'groq' or 'local')")
+
+    model = _GROQ_MODELS.get(agent)
     if model is None:
         raise ValueError(f"No model configured for agent '{agent}'")
+    if not settings.groq_api_key:
+        raise ValueError("llm_provider='groq' but GROQ_API_KEY is not set")
     return ChatGroq(model=model, api_key=settings.groq_api_key, **kwargs)

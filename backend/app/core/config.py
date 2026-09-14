@@ -12,7 +12,14 @@ _SYNC_POSTGRES_DRIVERS = {"postgresql", "postgres", "postgresql+psycopg2", "post
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    groq_api_key: str
+    # which backend get_llm() talks to — "groq" (cloud, default while iterating) or "local" (an
+    # on-prem/self-hosted OpenAI-compatible server, e.g. Ollama). Swapping this is meant to be a
+    # one-line env change, not a code change — see app/core/llm.py.
+    llm_provider: str = "groq"
+
+    # required only while llm_provider="groq"; get_llm() raises a clear error if it's missing and
+    # groq is selected, rather than failing at import time for setups that only use local models
+    groq_api_key: Optional[str] = None
 
     # one model id per agent, so each can be tuned independently
     main_agent_model: str = "llama-3.3-70b-versatile"
@@ -20,6 +27,15 @@ class Settings(BaseSettings):
     # picks between pre-validated chart options — a small judgement call on a short prompt, so it
     # has no use for a larger model than this
     visualizer_model: str = "llama-3.3-70b-versatile"
+
+    # --- local LLM (only used when llm_provider="local") --------------------------------------
+
+    local_llm_base_url: str = "http://localhost:11434"
+    # falls back to the groq model name above when unset, so a partial local setup (one agent
+    # pinned locally, others not yet) doesn't need every field filled in
+    local_main_agent_model: Optional[str] = None
+    local_sql_agent_model: Optional[str] = None
+    local_visualizer_model: Optional[str] = None
 
     # app's own metadata store (saved DB connections), separate from any target DB
     metadata_database_url: str
