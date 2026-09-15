@@ -205,3 +205,11 @@ The Vite dev server starts at `http://localhost:5175` (fixed via `strictPort` in
 - Groq 404s on a chat request: a model may have been deprecated on Groq's side. Check the model list
   and update the relevant `*_MODEL` value in `backend/.env` or default in
   `backend/app/core/config.py`.
+
+
+
+## Credentials
+
+Name: sayed
+user_name: random@rand.in
+password: rand@1234
