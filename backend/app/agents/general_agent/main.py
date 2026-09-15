@@ -10,7 +10,7 @@ convention — see app/router/chat.py, which never resolves a DB connection for 
 
 from app.agents.general_agent.state import GeneralAgentState
 from app.agents.shared.supervisor import build_agent_graph
-from app.prompts.general_agent import RESPOND_PROMPT
+from app.agents.general_agent.prompts import RESPOND_PROMPT
 
 graph = build_agent_graph(
     state_type=GeneralAgentState,

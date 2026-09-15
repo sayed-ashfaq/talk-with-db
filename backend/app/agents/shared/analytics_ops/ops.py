@@ -2,7 +2,7 @@
 picks from and parameterizes, not code it writes.
 
 Same precedent as visualizer/charts.py: the model's job is choosing and parameterizing from a
-validated set of shapes; app.agents.analytics.executor is the only thing that ever turns one into an
+validated set of shapes; app.agents.shared.analytics_ops.executor is the only thing that ever turns one into an
 actual pandas call.
 """
 

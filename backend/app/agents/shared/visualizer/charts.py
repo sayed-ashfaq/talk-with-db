@@ -18,11 +18,11 @@ from typing import Optional
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
-from app.agents.sql_agent.db import QueryResult
-from app.agents.visualizer.profile import ColumnProfile, ResultProfile, profile_result
+from app.agents.shared.tabular import QueryResult
+from app.agents.shared.visualizer.profile import ColumnProfile, ResultProfile, profile_result
+from app.agents.shared.visualizer.prompts import CHOICE_PROMPT
 from app.core.llm import get_llm
 from app.core.logging import get_logger, log_duration
-from app.prompts.visualizer import CHOICE_PROMPT
 
 logger = get_logger(__name__)
 

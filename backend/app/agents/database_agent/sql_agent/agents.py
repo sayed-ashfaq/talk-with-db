@@ -1,14 +1,14 @@
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 
+from app.agents.database_agent.sql_agent import db, sql
+from app.agents.database_agent.sql_agent.prompts import FIXER_PROMPT, GENERATION_PROMPT, SYNTHESIZER_PROMPT
+from app.agents.database_agent.sql_agent.state import SQLAgentState
 from app.agents.database_agent.state import DatabaseAgentState
-from app.agents.sql_agent import db, sql
-from app.agents.visualizer import charts
-from app.agents.sql_agent.state import SQLAgentState
+from app.agents.shared.visualizer import charts
 from app.core.exceptions import DestructiveSQLError, NL2SQLError, NoActiveConnectionError
 from app.core.llm import get_llm
 from app.core.logging import get_logger, log_duration
-from app.prompts.sql_agent import FIXER_PROMPT, GENERATION_PROMPT, SYNTHESIZER_PROMPT
 
 MAX_FIX_ATTEMPTS = 3
 

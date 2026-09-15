@@ -2,12 +2,12 @@
 one supervisor, built from the shared scaffold in app.agents.shared.supervisor.
 """
 
-from app.agents.analytics.agent import analytics_agent_node
+from app.agents.database_agent.analytics_agent.agent import analytics_agent_node
+from app.agents.database_agent.prompts import RESPOND_PROMPT, SYSTEM_PROMPT
+from app.agents.database_agent.sql_agent.agents import sql_agent_node
 from app.agents.database_agent.state import DatabaseAgentState
 from app.agents.shared.supervisor import build_agent_graph
-from app.agents.sql_agent.agents import sql_agent_node
-from app.agents.visualizer.agent import visualizer_node
-from app.prompts.database_agent import RESPOND_PROMPT, SYSTEM_PROMPT
+from app.agents.shared.visualizer.agent import visualizer_node
 
 graph = build_agent_graph(
     state_type=DatabaseAgentState,

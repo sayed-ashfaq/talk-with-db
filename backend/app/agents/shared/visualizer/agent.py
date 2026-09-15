@@ -9,8 +9,7 @@ The rules and the model call are the same ones the SQL agent uses, deliberately:
 by name and a chart chosen automatically should be the same chart, drawn by the same code.
 """
 
-from app.agents.database_agent.state import DatabaseAgentState
-from app.agents.visualizer import charts
+from app.agents.shared.visualizer import charts
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -29,7 +28,7 @@ def _cannot_chart(profile) -> str:
     )
 
 
-def visualizer_node(state: DatabaseAgentState) -> dict:
+def visualizer_node(state: dict) -> dict:
     result = state.get("prior_result")
     if result is None or not result.rows:
         return {"agent_output": NO_DATA, "agent_sql": None}

@@ -7,9 +7,10 @@ no changes at all.
 from typing import Optional
 
 from app.agents.shared.state import BaseAgentState
-from app.agents.sql_agent.db import DbContext, QueryResult
-from app.agents.visualizer.charts import ChartSpec
-from app.agents.visualizer.profile import ResultProfile
+from app.agents.database_agent.sql_agent.db import DbContext
+from app.agents.shared.tabular import QueryResult
+from app.agents.shared.visualizer.charts import ChartSpec
+from app.agents.shared.visualizer.profile import ResultProfile
 
 
 class DatabaseAgentState(BaseAgentState):

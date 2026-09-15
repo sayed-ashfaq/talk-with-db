@@ -1,6 +1,6 @@
 """Pandas/numpy analytics over rows already in this conversation — never a fresh query.
 
-The model picks operations from ops.py's closed vocabulary; app.agents.analytics.executor is the
+The model picks operations from shared.analytics_ops.ops's closed vocabulary; executor.py is the
 only thing that ever calls pandas with them, so nothing model-authored runs as code. Mirrors
 visualizer/agent.py's shape: reads rows already fetched (this turn's result_rows, or an earlier
 turn's prior_result), never talks to the target database itself.
@@ -9,12 +9,12 @@ turn's prior_result), never talks to the target database itself.
 import pandas as pd
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from app.agents.analytics.executor import AnalyticsPlanError, apply_plan
-from app.agents.analytics.ops import AnalyticsPlan
-from app.agents.sql_agent.db import QueryResult
+from app.agents.database_agent.analytics_agent.prompts import PLAN_PROMPT, SYNTHESIZER_PROMPT
+from app.agents.shared.analytics_ops.executor import AnalyticsPlanError, apply_plan
+from app.agents.shared.analytics_ops.ops import AnalyticsPlan
+from app.agents.shared.tabular import QueryResult
 from app.core.llm import get_llm
 from app.core.logging import get_logger, log_duration
-from app.prompts.analytics import PLAN_PROMPT, SYNTHESIZER_PROMPT
 
 logger = get_logger(__name__)
 

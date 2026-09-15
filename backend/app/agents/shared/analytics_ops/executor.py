@@ -8,7 +8,7 @@ an unknown column is a rejected plan, not a pandas KeyError at runtime.
 
 import pandas as pd
 
-from app.agents.analytics.ops import AnalyticsPlan, FilterOp, GroupAggOp, LimitOp, PivotOp, SortOp
+from app.agents.shared.analytics_ops.ops import AnalyticsPlan, FilterOp, GroupAggOp, LimitOp, PivotOp, SortOp
 from app.core.exceptions import NL2SQLError
 
 

@@ -12,7 +12,8 @@ from typing import Literal, Optional
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.engine import Engine, make_url
 
-from app.agents.sql_agent import rows
+from app.agents.database_agent.sql_agent import rows
+from app.agents.shared.tabular import QueryResult
 from app.core.exceptions import ConnectionUnreachableError, SQLExecutionError
 from app.core.logging import get_logger
 
@@ -200,27 +201,6 @@ def render_schema_text(tables: dict[str, TableSchema], annotations: dict[tuple[s
             lines.append(f"  - FK: {constrained} -> {fk.referred_table}({referred})")
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
-
-
-@dataclass(frozen=True)
-class QueryResult:
-    """One execution's output.
-
-    Columns are carried separately from rows because an empty result still has a shape: a table
-    with headers and no data renders, whereas an empty list of dicts is indistinguishable from
-    having nothing to show.
-    """
-
-    columns: list[str]
-    rows: list[dict]
-    # we hit MAX_ROWS and there may be more behind it. False positive in exactly one case — a
-    # result that happens to be MAX_ROWS rows long — which costs the user a truthful "capped at
-    # 5000 rows" note and nothing else.
-    truncated: bool
-
-    @property
-    def row_count(self) -> int:
-        return len(self.rows)
 
 
 def run_query(sql: str, connection: Connection) -> QueryResult:

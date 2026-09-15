@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass, replace
 from typing import Any, Literal, Optional
 
-from app.agents.sql_agent.db import QueryResult
+from app.agents.shared.tabular import QueryResult
 
 Role = Literal["temporal", "numeric", "categorical"]
 

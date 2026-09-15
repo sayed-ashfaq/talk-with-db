@@ -15,8 +15,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, ValidationError
 
-from app.agents.sql_agent.db import QueryResult
-from app.agents.visualizer.charts import ChartSpec
+from app.agents.shared.tabular import QueryResult
+from app.agents.shared.visualizer.charts import ChartSpec
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)

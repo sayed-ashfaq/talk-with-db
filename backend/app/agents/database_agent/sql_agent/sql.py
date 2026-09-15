@@ -5,7 +5,7 @@ import unicodedata
 import sqlglot
 import sqlparse
 
-from app.agents.sql_agent import db
+from app.agents.database_agent.sql_agent import db
 from app.core.exceptions import DestructiveSQLError, UnsafeSQLError
 
 _FENCE_RE = re.compile(r"```(?:sql)?\s*(.*?)```", re.IGNORECASE | re.DOTALL)
