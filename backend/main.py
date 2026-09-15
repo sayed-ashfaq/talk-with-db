@@ -11,6 +11,7 @@ from app.router.auth import router as auth_router
 from app.router.chat import router as chat_router
 from app.router.chats import router as chats_router
 from app.router.connections import router as connections_router
+from app.router.documents import router as documents_router
 
 setup_logging()
 logger = get_logger(__name__)
@@ -43,6 +44,7 @@ app.include_router(auth_router)
 app.include_router(chat_router)
 app.include_router(chats_router)
 app.include_router(connections_router)
+app.include_router(documents_router)
 
 
 @app.exception_handler(AppError)

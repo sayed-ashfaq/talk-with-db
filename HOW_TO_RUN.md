@@ -16,12 +16,16 @@ databases are added later in the UI as saved Postgres/MySQL connections.
 - `uv`
 - Docker, or a locally installed Postgres server
 - A Groq API key
+- A Tavily API key (optional — only needed for the General agent's web search specialist; without
+  it, web search questions get a plain "not configured" answer instead of an error)
 
 ## First-Time Setup
 
 ### 1. Start the metadata Postgres
 
-Docker is the simplest local setup:
+The General agent's document search (RAG) stores embeddings with `pgvector`, so the metadata
+Postgres needs that extension available — plain `postgres:16` does not include it. Docker is the
+simplest local setup:
 
 ```bash
 docker run --name nl2sql-meta-db \
@@ -29,7 +33,7 @@ docker run --name nl2sql-meta-db \
   -e POSTGRES_PASSWORD=nl2sql_dev_password \
   -e POSTGRES_DB=nl2sql_meta \
   -p 5435:5432 \
-  -d postgres:16
+  -d pgvector/pgvector:pg16
 ```
 
 If the container already exists later, start it with:
@@ -38,7 +42,30 @@ If the container already exists later, start it with:
 docker start nl2sql-meta-db
 ```
 
-If you prefer an existing local Postgres, create the same user/database yourself:
+Already have a `postgres:16` container running from before this feature existed? Install the
+extension package into it directly rather than recreating the container (this keeps your existing
+data volume):
+
+```bash
+docker exec <container> apt-get update
+docker exec <container> apt-get install -y postgresql-16-pgvector
+```
+
+If that container has no outbound network access (some sandboxed/offline environments), download
+the `.deb` on a machine that does and `docker cp` it in instead:
+
+```bash
+docker run --rm -v /tmp/pgvector_debs:/out postgres:16 bash -c \
+  "apt-get update -qq && cd /out && apt-get download postgresql-16-pgvector"
+docker cp /tmp/pgvector_debs/postgresql-16-pgvector_*.deb <container>:/tmp/pgvector.deb
+docker exec <container> dpkg -i /tmp/pgvector.deb
+```
+
+Either way, the extension itself is created by the app's own migration (`alembic upgrade head`,
+step 3 below) — installing the package just makes `CREATE EXTENSION vector` available to run.
+
+If you prefer an existing local Postgres, create the same user/database yourself (it needs
+`pgvector` installed the same way — see your distro's Postgres extension packages):
 
 ```sql
 CREATE USER nl2sql WITH PASSWORD 'nl2sql_dev_password';
@@ -59,6 +86,10 @@ SESSION_SECRET_KEY=replace_with_random_secret
 
 FRONTEND_URL=http://localhost:5175
 COOKIE_SECURE=false
+
+# optional — the General agent's web search specialist returns a graceful "not configured"
+# answer instead of results when this is unset
+TAVILY_API_KEY=your_tavily_api_key_here
 ```
 
 Generate the two secrets with:

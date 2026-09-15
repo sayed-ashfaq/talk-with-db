@@ -15,6 +15,7 @@ from app.db.models import Message
 from app.db.session import SessionDep
 from app.services import chats as chat_service
 from app.services import connections as connection_service
+from app.services import csv_uploads as csv_upload_service
 from app.services import results as result_service
 from app.services.results import QueryData
 
@@ -91,6 +92,7 @@ async def chat(request: ChatRequest, user: CurrentUser, session: SessionDep) -> 
         )
         history: list[Message] = []
         prior = None
+        csv_context = None
     else:
         # ownership checked here, before any LLM work — posting into someone else's chat must fail
         # fast rather than after 30 seconds of inference
@@ -104,6 +106,14 @@ async def chat(request: ChatRequest, user: CurrentUser, session: SessionDep) -> 
         # synchronously on a worker thread with no way to await a second read. One indexed lookup
         # against our own metadata store, next to a turn that spends seconds in LLM calls.
         prior = result_service.from_storage(await chat_service.load_last_result(session, chat_row.id))
+        # same reasoning, same constraint — csv_agent needs this chat's uploaded CSV (if any)
+        # already in hand when the graph starts, since it can't await a read mid-turn either. Only
+        # a "general" chat can have one, so this skips the query for a "database" chat entirely.
+        csv_context = (
+            await csv_upload_service.load_latest(session, chat_row.id)
+            if chat_row.section == "general"
+            else None
+        )
 
     section = chat_row.section
 
@@ -147,11 +157,21 @@ async def chat(request: ChatRequest, user: CurrentUser, session: SessionDep) -> 
                 general_graph.invoke,
                 {
                     "chat_history": lc_history,
+                    "user_id": user.id,
+                    "chat_id": chat_row.id,
+                    "csv_context": csv_context,
+                    "prior_result": result_service.to_query_result(prior) if prior else None,
                     "question": request.message,
                     "refined_query": "",
                     "next": "",
                     "agent_output": None,
+                    "agent_sql": None,
                     "attempts": 0,
+                    "result_rows": None,
+                    "result_columns": None,
+                    "result_truncated": False,
+                    "chart_spec": None,
+                    "chart_profile": None,
                     "final_answer": None,
                 },
             )

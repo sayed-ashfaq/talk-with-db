@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     # picks/parameterizes a pandas op plan from a fixed vocabulary — same structured-generation
     # shape as sql_agent, so it defaults to the same model
     analytics_agent_model: str = "openai/gpt-oss-120b"
+    # answers from retrieved document chunks / uploaded CSVs / search results — these are the
+    # outputs the eventual local-model comparison gets judged against, so accuracy over cost: same
+    # tier as sql_agent/analytics_agent, not the lighter main_agent/visualizer tier
+    rag_agent_model: str = "openai/gpt-oss-120b"
+    csv_agent_model: str = "openai/gpt-oss-120b"
+    websearch_agent_model: str = "openai/gpt-oss-120b"
 
     # --- local LLM (only used when llm_provider="local") --------------------------------------
 
@@ -42,6 +48,13 @@ class Settings(BaseSettings):
     local_sql_agent_model: Optional[str] = None
     local_visualizer_model: Optional[str] = None
     local_analytics_agent_model: Optional[str] = None
+    local_rag_agent_model: Optional[str] = None
+    local_csv_agent_model: Optional[str] = None
+    local_websearch_agent_model: Optional[str] = None
+
+    # --- General agent tools ------------------------------------------------------------------
+
+    tavily_api_key: Optional[str] = None
 
     # app's own metadata store (saved DB connections), separate from any target DB
     metadata_database_url: str

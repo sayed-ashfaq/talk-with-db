@@ -7,6 +7,9 @@ _GROQ_MODELS = {
     "sql_agent": settings.sql_agent_model,
     "visualizer": settings.visualizer_model,
     "analytics_agent": settings.analytics_agent_model,
+    "rag_agent": settings.rag_agent_model,
+    "csv_agent": settings.csv_agent_model,
+    "websearch_agent": settings.websearch_agent_model,
 }
 
 # falls back to the groq model name when a local override isn't set, so a partial local setup
@@ -16,6 +19,9 @@ _LOCAL_MODELS = {
     "sql_agent": settings.local_sql_agent_model or settings.sql_agent_model,
     "visualizer": settings.local_visualizer_model or settings.visualizer_model,
     "analytics_agent": settings.local_analytics_agent_model or settings.analytics_agent_model,
+    "rag_agent": settings.local_rag_agent_model or settings.rag_agent_model,
+    "csv_agent": settings.local_csv_agent_model or settings.csv_agent_model,
+    "websearch_agent": settings.local_websearch_agent_model or settings.websearch_agent_model,
 }
 
 

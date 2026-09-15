@@ -102,3 +102,35 @@ class OAuthNotConfiguredError(AuthError):
 class OAuthFailedError(AuthError):
     status_code = 400
     detail = "Google sign-in failed"
+
+
+class DocumentNotFoundError(AppError):
+    status_code = 404
+    # identical whether the id is unknown or owned by someone else, same reasoning as
+    # ConnectionNotFoundError
+    detail = "no such document"
+
+
+class CsvUploadNotFoundError(AppError):
+    status_code = 404
+    detail = "no CSV has been uploaded to this chat yet"
+
+
+class NotAGeneralChatError(AppError):
+    status_code = 409
+    detail = "documents and CSVs can only be uploaded to a general chat"
+
+
+class UnsupportedFileTypeError(AppError):
+    status_code = 400
+    detail = "unsupported file type"
+
+
+class FileTooLargeError(AppError):
+    status_code = 400
+    detail = "file is too large"
+
+
+class EmptyDocumentError(AppError):
+    status_code = 400
+    detail = "no usable content found in this file"

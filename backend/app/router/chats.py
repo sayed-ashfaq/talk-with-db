@@ -3,21 +3,28 @@
 Sending a message lives in app.router.chat — it belongs with the agent invocation rather than here.
 """
 
+import asyncio
 import uuid
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, File, UploadFile
 from pydantic import BaseModel, Field
 
+from app.agents.general_agent.csv_agent import loader as csv_loader
 from app.core.dependencies import CurrentUser
-from app.core.logging import get_logger
+from app.core.exceptions import FileTooLargeError, NotAGeneralChatError, UnsupportedFileTypeError
+from app.core.logging import get_logger, log_duration
 from app.db.session import SessionDep
 from app.router.chat import MessageResponse
 from app.services import chats as chat_service
+from app.services import csv_uploads as csv_upload_service
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 logger = get_logger(__name__)
+
+# generous for a real spreadsheet, small enough to bound memory on one request
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 
 
 class ChatSummary(BaseModel):
@@ -78,3 +85,44 @@ async def rename_chat(
 async def remove_chat(chat_id: uuid.UUID, user: CurrentUser, session: SessionDep) -> dict:
     await chat_service.delete_chat(session, user.id, chat_id)
     return {"deleted": str(chat_id)}
+
+
+class CsvUploadResponse(BaseModel):
+    id: uuid.UUID
+    filename: str
+    row_count: int
+    truncated: bool
+    created_at: datetime
+
+
+@router.post("/{chat_id}/csv", response_model=CsvUploadResponse)
+async def upload_csv(
+    chat_id: uuid.UUID, user: CurrentUser, session: SessionDep, file: UploadFile = File(...)
+) -> CsvUploadResponse:
+    """Replaces nothing — csv_agent always reads the most recent upload for this chat (see
+    app.services.csv_uploads.load_latest), so re-uploading is just uploading again."""
+    chat = await chat_service.get_owned_chat(session, user.id, chat_id)  # 404s if not theirs
+    if chat.section != "general":
+        raise NotAGeneralChatError
+
+    if not (file.filename or "").lower().endswith(".csv"):
+        raise UnsupportedFileTypeError("only CSV files are supported")
+
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise FileTooLargeError
+
+    logger.info("user %s uploading CSV '%s' to chat %s", user.id, file.filename, chat_id)
+    with log_duration("CSV parse"):
+        result = await asyncio.to_thread(csv_loader.parse_csv, content)
+
+    upload = await csv_upload_service.create_csv_upload(
+        session, user.id, chat_id, filename=file.filename or "data.csv", result=result
+    )
+    return CsvUploadResponse(
+        id=upload.id,
+        filename=upload.filename,
+        row_count=len(result.rows),
+        truncated=result.truncated,
+        created_at=upload.created_at,
+    )
