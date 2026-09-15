@@ -12,7 +12,9 @@ async function request(path, options = {}) {
   let response;
   try {
     response = await fetch(`${BASE_URL}${path}`, {
-      headers: { "Content-Type": "application/json" },
+      // omitted for FormData bodies — the browser sets its own multipart boundary, which a fixed
+      // header here would clobber
+      headers: options.body instanceof FormData ? undefined : { "Content-Type": "application/json" },
       // the session lives in an httponly cookie — without this, cross-origin requests (frontend
       // dev server vs backend) neither send it nor accept the Set-Cookie that logs someone in
       credentials: "include",
@@ -92,6 +94,31 @@ export function upsertAnnotation(connectionId, payload) {
 
 export function deleteAnnotation(connectionId, annotationId) {
   return request(`/connections/${connectionId}/annotations/${annotationId}`, { method: "DELETE" });
+}
+
+// chatId omitted uploads into the user's library (visible to every general chat); given, it
+// uploads into that one chat only.
+export function uploadDocument(file, chatId) {
+  const body = new FormData();
+  body.append("file", file);
+  if (chatId) body.append("chat_id", chatId);
+  return request("/documents", { method: "POST", body });
+}
+
+// chatId omitted lists the library; given, lists just that chat's own uploads.
+export function listDocuments(chatId) {
+  return request(chatId ? `/documents?chat_id=${chatId}` : "/documents");
+}
+
+export function deleteDocument(id) {
+  return request(`/documents/${id}`, { method: "DELETE" });
+}
+
+// Replaces nothing server-side — csv_agent always reads the most recent upload for this chat.
+export function uploadCsv(chatId, file) {
+  const body = new FormData();
+  body.append("file", file);
+  return request(`/chats/${chatId}/csv`, { method: "POST", body });
 }
 
 export function signup(email, password, fullName) {

@@ -1,10 +1,13 @@
-.form {
+.wrap {
   flex-shrink: 0;
+  margin: 0 20px 20px;
+}
+
+.form {
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  margin: 0 20px 20px;
-  padding: 10px 10px 10px 16px;
+  padding: 10px 10px 10px 12px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -45,4 +48,76 @@
 
 .sendButton:hover:not(:disabled) {
   background: var(--color-accent-hover);
+}
+
+.attachButton {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+}
+
+.attachButton:hover:not(:disabled) {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.attachButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fileInput {
+  display: none;
+}
+
+.stagedChip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 6px 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.stagedName {
+  color: var(--color-text);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stagedHint {
+  flex: 1;
+  font-size: 12px;
+}
+
+.stagedRemove {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  line-height: 1;
+  color: var(--color-text-secondary);
+}
+
+.stagedRemove:hover {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.uploadError {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--color-danger);
 }

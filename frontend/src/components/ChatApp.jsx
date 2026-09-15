@@ -3,6 +3,7 @@ import ConnectionBar from "./ConnectionBar/ConnectionBar";
 import ChatWindow from "./ChatWindow/ChatWindow";
 import ChatInput from "./ChatInput/ChatInput";
 import Landing from "./Landing/Landing";
+import LibraryModal from "./Library/LibraryModal";
 import SchemaGraphModal from "./SchemaGraphModal/SchemaGraphModal";
 import Sidebar from "./Sidebar/Sidebar";
 import UserMenu from "./UserMenu/UserMenu";
@@ -24,6 +25,7 @@ export default function ChatApp({ auth }) {
   const sessions = useChatSessions();
   const chat = useChat({ onChatCreated: sessions.addChat, onChatUpdated: sessions.touchChat });
   const [isGraphOpen, setIsGraphOpen] = useState(false);
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const handleDeleteChat = async (chatId) => {
@@ -48,6 +50,7 @@ export default function ChatApp({ auth }) {
           onRename={sessions.rename}
           onDelete={handleDeleteChat}
           onCollapse={() => setIsSidebarOpen(false)}
+          onOpenLibrary={() => setIsLibraryOpen(true)}
         />
       )}
 
@@ -95,11 +98,28 @@ export default function ChatApp({ auth }) {
               onSectionChange={chat.setSection}
               onSend={chat.sendMessage}
               disabled={chat.isSending}
+              onAttach={chat.attachFile}
+              stagedFile={chat.stagedFile}
+              onClearStaged={chat.clearStagedFile}
+              isUploading={chat.isUploading}
+              uploadError={chat.uploadError}
             />
           ) : (
             <>
-              <ChatWindow messages={chat.messages} isSending={chat.isSending} error={chat.error} />
-              <ChatInput onSend={chat.sendMessage} disabled={chat.isSending} section={chat.section} />
+              <ChatWindow
+                messages={chat.messages}
+                isSending={chat.isSending}
+                error={chat.error || chat.uploadError}
+              />
+              <ChatInput
+                onSend={chat.sendMessage}
+                disabled={chat.isSending}
+                section={chat.section}
+                onAttach={chat.attachFile}
+                stagedFile={chat.stagedFile}
+                onClearStaged={chat.clearStagedFile}
+                isUploading={chat.isUploading}
+              />
             </>
           )}
         </main>
@@ -108,6 +128,7 @@ export default function ChatApp({ auth }) {
       {isGraphOpen && (
         <SchemaGraphModal connectionId={connections.active?.id} onClose={() => setIsGraphOpen(false)} />
       )}
+      {isLibraryOpen && <LibraryModal onClose={() => setIsLibraryOpen(false)} />}
     </div>
   );
 }

@@ -68,6 +68,35 @@ export function SidebarIcon() {
   );
 }
 
+export function PaperclipIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path
+        d="M11 4.5L5.5 10C4.67 10.83 4.67 12.17 5.5 13C6.33 13.83 7.67 13.83 8.5 13L13 8.5C14.38 7.12 14.38 4.88 13 3.5C11.62 2.12 9.38 2.12 8 3.5L3.5 8C1.57 9.93 1.57 13.07 3.5 15"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function DocumentIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path
+        d="M4 1.5H9L12.5 5V14.5H4V1.5Z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M9 1.5V5H12.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function SparkleIcon() {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none">

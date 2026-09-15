@@ -56,6 +56,14 @@ class Settings(BaseSettings):
 
     tavily_api_key: Optional[str] = None
 
+    # fastembed model rag_agent embeds documents and queries with. Swapping this to a different
+    # model is safe only if its output dimension also matches document_chunks.embedding's column
+    # (vector(384), sized for this default) — a different dimension needs a migration to alter
+    # that column, and either way every existing chunk needs re-embedding with the new model
+    # before it's comparable to a query embedded with it. See app/agents/general_agent/rag_agent/
+    # ingest.py's EMBEDDING_DIM comment.
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+
     # app's own metadata store (saved DB connections), separate from any target DB
     metadata_database_url: str
     credentials_encryption_key: str

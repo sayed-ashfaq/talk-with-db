@@ -37,7 +37,18 @@ function randomGreeting(user) {
   return template.replace("{name}", firstName(user));
 }
 
-export default function Landing({ user, section, onSectionChange, onSend, disabled }) {
+export default function Landing({
+  user,
+  section,
+  onSectionChange,
+  onSend,
+  disabled,
+  onAttach,
+  stagedFile,
+  onClearStaged,
+  isUploading,
+  uploadError,
+}) {
   const greeting = useMemo(() => randomGreeting(user), [user]);
   const suggestions = SUGGESTIONS[section] ?? SUGGESTIONS.general;
 
@@ -51,7 +62,16 @@ export default function Landing({ user, section, onSectionChange, onSend, disabl
       </h2>
 
       <div className={styles.inputWrap}>
-        <ChatInput onSend={onSend} disabled={disabled} section={section} />
+        <ChatInput
+          onSend={onSend}
+          disabled={disabled}
+          section={section}
+          onAttach={onAttach}
+          stagedFile={stagedFile}
+          onClearStaged={onClearStaged}
+          isUploading={isUploading}
+          uploadError={uploadError}
+        />
       </div>
 
       <div className={styles.suggestions}>

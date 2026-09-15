@@ -8,8 +8,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-# fastembed's default model (BAAI/bge-small-en-v1.5) — fixed, not a setting: changing it would
-# silently invalidate every stored embedding's comparability with newly embedded queries.
+# Sized for settings.embedding_model's default (BAAI/bge-small-en-v1.5). This is a schema fact,
+# not a setting — changing it means altering this column via a migration, so
+# app.agents.general_agent.rag_agent.ingest checks a newly produced embedding against this
+# constant and fails loudly rather than letting a dimension mismatch reach the database as a raw
+# driver error.
 EMBEDDING_DIM = 384
 
 

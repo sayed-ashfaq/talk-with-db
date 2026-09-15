@@ -1,5 +1,5 @@
 import ChatListItem from "./ChatListItem";
-import { PlusIcon, SidebarIcon } from "../common/icons";
+import { DocumentIcon, PlusIcon, SidebarIcon } from "../common/icons";
 import styles from "./Sidebar.module.css";
 
 export default function Sidebar({
@@ -12,6 +12,7 @@ export default function Sidebar({
   onRename,
   onDelete,
   onCollapse,
+  onOpenLibrary,
 }) {
   return (
     <aside className={styles.root}>
@@ -19,6 +20,15 @@ export default function Sidebar({
         <button type="button" className={styles.newChatButton} onClick={onNew}>
           <PlusIcon />
           New chat
+        </button>
+        <button
+          type="button"
+          className={styles.collapseButton}
+          onClick={onOpenLibrary}
+          aria-label="Document library"
+          title="Document library"
+        >
+          <DocumentIcon />
         </button>
         <button
           type="button"
