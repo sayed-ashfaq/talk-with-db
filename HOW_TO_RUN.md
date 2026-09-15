@@ -57,7 +57,7 @@ METADATA_DATABASE_URL=postgresql://nl2sql:nl2sql_dev_password@localhost:5435/nl2
 CREDENTIALS_ENCRYPTION_KEY=replace_with_fernet_key
 SESSION_SECRET_KEY=replace_with_random_secret
 
-FRONTEND_URL=http://localhost:5173
+FRONTEND_URL=http://localhost:5175
 COOKIE_SECURE=false
 ```
 
@@ -164,7 +164,7 @@ npm install
 npm run dev
 ```
 
-The Vite dev server usually starts at `http://localhost:5173`.
+The Vite dev server starts at `http://localhost:5175` (fixed via `strictPort` in `vite.config.js`).
 
 ## If Something Breaks
 

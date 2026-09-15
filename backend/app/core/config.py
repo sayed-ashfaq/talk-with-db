@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     # app is reachable over a network, or the cookie travels in plaintext.
     cookie_secure: bool = False
     # where the Google callback sends the browser once the session cookie is set
-    frontend_url: str = "http://localhost:5173"
+    frontend_url: str = "http://localhost:5175"
 
     # signs the short-lived cookie holding the OAuth state parameter (CSRF protection for the
     # Google redirect). Unrelated to session tokens, which are random and stored server-side.
