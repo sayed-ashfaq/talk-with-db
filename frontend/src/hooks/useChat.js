@@ -31,6 +31,10 @@ export function useChat({ onChatCreated, onChatUpdated } = {}) {
   const [isSending, setIsSending] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  // which top-level agent a new conversation goes to. Only meaningful before the first message —
+  // once a chat exists, its section is fixed server-side, so this is otherwise just display state.
+  // "general" (the Chat agent) is the default landing experience; Database is the opt-in.
+  const [section, setSection] = useState("general");
   const chatIdRef = useRef(null);
 
   // start a new conversation: no request needed, the chat row is created by the first message
@@ -38,6 +42,7 @@ export function useChat({ onChatCreated, onChatUpdated } = {}) {
     chatIdRef.current = null;
     setMessages([]);
     setError(null);
+    setSection("general");
   }, []);
 
   const openChat = useCallback(async (chatId) => {
@@ -47,6 +52,7 @@ export function useChat({ onChatCreated, onChatUpdated } = {}) {
       const chat = await getChat(chatId);
       chatIdRef.current = chat.id;
       setMessages(chat.messages.map(toMessage));
+      setSection(chat.section);
     } catch (err) {
       setError(err.message || "Couldn't open that conversation.");
     } finally {
@@ -65,7 +71,7 @@ export function useChat({ onChatCreated, onChatUpdated } = {}) {
       setIsSending(true);
 
       try {
-        const response = await sendChatMessage(trimmed, chatIdRef.current);
+        const response = await sendChatMessage(trimmed, chatIdRef.current, section);
         const isNew = chatIdRef.current === null;
         chatIdRef.current = response.chat_id;
 
@@ -82,7 +88,7 @@ export function useChat({ onChatCreated, onChatUpdated } = {}) {
         setIsSending(false);
       }
     },
-    [isSending, onChatCreated, onChatUpdated],
+    [isSending, section, onChatCreated, onChatUpdated],
   );
 
   return {
@@ -94,5 +100,9 @@ export function useChat({ onChatCreated, onChatUpdated } = {}) {
     isSending,
     isLoading,
     error,
+    section,
+    // locked once the conversation has actually started — a chat's section can't change after
+    // creation, so the switcher shouldn't offer to either
+    setSection: chatIdRef.current === null ? setSection : undefined,
   };
 }

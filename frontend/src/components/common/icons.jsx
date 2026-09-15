@@ -68,6 +68,17 @@ export function SidebarIcon() {
   );
 }
 
+export function SparkleIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+      <path
+        d="M12 2.5C12.55 7.1 13.9 9.1 18.5 10C13.9 10.9 12.55 12.9 12 17.5C11.45 12.9 10.1 10.9 5.5 10C10.1 9.1 11.45 7.1 12 2.5Z"
+        fill="var(--color-accent)"
+      />
+    </svg>
+  );
+}
+
 export function GoogleIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18">

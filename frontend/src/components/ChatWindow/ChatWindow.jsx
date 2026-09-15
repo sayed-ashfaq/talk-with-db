@@ -13,13 +13,9 @@ export default function ChatWindow({ messages, isSending, error }) {
 
   return (
     <div className={styles.window}>
-      {messages.length === 0 && !isSending ? (
-        <div className={styles.empty}>
-          <p>Ask a question about your data in plain English.</p>
-        </div>
-      ) : (
-        messages.map((message) => <Message key={message.id} message={message} />)
-      )}
+      {messages.map((message) => (
+        <Message key={message.id} message={message} />
+      ))}
 
       {isSending && (
         <div className={styles.pendingRow}>

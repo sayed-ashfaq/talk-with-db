@@ -2,6 +2,7 @@ import { useState } from "react";
 import ConnectionBar from "./ConnectionBar/ConnectionBar";
 import ChatWindow from "./ChatWindow/ChatWindow";
 import ChatInput from "./ChatInput/ChatInput";
+import Landing from "./Landing/Landing";
 import SchemaGraphModal from "./SchemaGraphModal/SchemaGraphModal";
 import Sidebar from "./Sidebar/Sidebar";
 import UserMenu from "./UserMenu/UserMenu";
@@ -10,6 +11,13 @@ import { useConnections } from "../hooks/useConnections";
 import { useChat } from "../hooks/useChat";
 import { useChatSessions } from "../hooks/useChatSessions";
 import styles from "../App.module.css";
+
+// What the header shows in place of the static app name — always the active conversation's
+// section, so it's never ambiguous which agent is answering.
+const SECTION_COPY = {
+  general: { title: "Chat", tagline: "Your general assistant — ask, brainstorm, write." },
+  database: { title: "Database", tagline: "Talk to your data in plain English." },
+};
 
 export default function ChatApp({ auth }) {
   const connections = useConnections();
@@ -22,6 +30,10 @@ export default function ChatApp({ auth }) {
     await sessions.remove(chatId);
     if (chatId === chat.chatId) chat.newChat();
   };
+
+  // no chat id and nothing sent yet — the landing screen, not the scrolling transcript view
+  const isLanding = chat.chatId === null && chat.messages.length === 0;
+  const sectionCopy = SECTION_COPY[chat.section] ?? SECTION_COPY.general;
 
   return (
     <div className={styles.app}>
@@ -53,27 +65,43 @@ export default function ChatApp({ auth }) {
                 <SidebarIcon />
               </button>
             )}
-            <h1>NL2SQL</h1>
-            <span>Talk with your database</span>
+            <div className={styles.brandText}>
+              <h1>{sectionCopy.title}</h1>
+              <span>{sectionCopy.tagline}</span>
+            </div>
           </div>
           <div className={styles.headerActions}>
-            <ConnectionBar
-              connections={connections.connections}
-              active={connections.active}
-              isLoading={connections.isLoading}
-              error={connections.error}
-              onActivate={connections.activate}
-              onCreate={connections.create}
-              onDelete={connections.remove}
-              onViewGraph={() => setIsGraphOpen(true)}
-            />
+            {chat.section === "database" && (
+              <ConnectionBar
+                connections={connections.connections}
+                active={connections.active}
+                isLoading={connections.isLoading}
+                error={connections.error}
+                onActivate={connections.activate}
+                onCreate={connections.create}
+                onDelete={connections.remove}
+                onViewGraph={() => setIsGraphOpen(true)}
+              />
+            )}
             <UserMenu user={auth.user} onLogout={auth.logout} />
           </div>
         </header>
 
         <main className={styles.main}>
-          <ChatWindow messages={chat.messages} isSending={chat.isSending} error={chat.error} />
-          <ChatInput onSend={chat.sendMessage} disabled={chat.isSending} />
+          {isLanding ? (
+            <Landing
+              user={auth.user}
+              section={chat.section}
+              onSectionChange={chat.setSection}
+              onSend={chat.sendMessage}
+              disabled={chat.isSending}
+            />
+          ) : (
+            <>
+              <ChatWindow messages={chat.messages} isSending={chat.isSending} error={chat.error} />
+              <ChatInput onSend={chat.sendMessage} disabled={chat.isSending} section={chat.section} />
+            </>
+          )}
         </main>
       </div>
 

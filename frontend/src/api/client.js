@@ -32,10 +32,14 @@ async function request(path, options = {}) {
 
 // chatId omitted (or null) starts a new conversation — the response carries the id to use from
 // then on. The server owns the history now; there is nothing to send back.
-export function sendChatMessage(message, chatId) {
+//
+// section only matters when chatId is null: it picks which top-level agent the new conversation
+// belongs to. Sending it on an existing chat is harmless — the backend ignores it there, since a
+// chat's section is fixed at creation.
+export function sendChatMessage(message, chatId, section) {
   return request("/chat", {
     method: "POST",
-    body: JSON.stringify({ message, chat_id: chatId ?? null }),
+    body: JSON.stringify({ message, chat_id: chatId ?? null, section }),
   });
 }
 

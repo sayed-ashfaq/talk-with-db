@@ -3,7 +3,7 @@ import styles from "./ChatInput.module.css";
 
 const MAX_HEIGHT_PX = 160;
 
-export default function ChatInput({ onSend, disabled }) {
+export default function ChatInput({ onSend, disabled, section }) {
   const [value, setValue] = useState("");
   const textareaRef = useRef(null);
 
@@ -41,7 +41,7 @@ export default function ChatInput({ onSend, disabled }) {
       <textarea
         ref={textareaRef}
         className={styles.textarea}
-        placeholder="Ask a question about your database…"
+        placeholder={section === "database" ? "Ask a question about your database…" : "How can I help you today?"}
         value={value}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
