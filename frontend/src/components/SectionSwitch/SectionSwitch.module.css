@@ -33,3 +33,15 @@
 .option.active {
   color: var(--color-accent);
 }
+
+.compact {
+  display: flex;
+  width: 100%;
+}
+
+.optionCompact {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+}

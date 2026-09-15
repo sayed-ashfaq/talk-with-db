@@ -57,12 +57,15 @@ export function useChat({ onChatCreated, onChatUpdated } = {}) {
   // from the most recent one, and that's otherwise invisible to the user
   const lastCsvFilenameRef = useRef(null);
 
-  // start a new conversation: no request needed, the chat row is created by the first message
-  const newChat = useCallback(() => {
+  // start a new conversation: no request needed, the chat row is created by the first message.
+  // targetSection omitted keeps whatever section is currently selected (the plain "New chat"
+  // button); passed explicitly, it also switches section (the sidebar's section switch, which
+  // can't change an existing chat's section, so it starts a fresh one instead).
+  const newChat = useCallback((targetSection) => {
     chatIdRef.current = null;
     setMessages([]);
     setError(null);
-    setSection("general");
+    if (targetSection) setSection(targetSection);
     setStagedFile(null);
     setUploadError(null);
     lastCsvFilenameRef.current = null;

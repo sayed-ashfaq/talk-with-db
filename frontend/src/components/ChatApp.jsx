@@ -3,7 +3,6 @@ import ConnectionBar from "./ConnectionBar/ConnectionBar";
 import ChatWindow from "./ChatWindow/ChatWindow";
 import ChatInput from "./ChatInput/ChatInput";
 import Landing from "./Landing/Landing";
-import LibraryModal from "./Library/LibraryModal";
 import SchemaGraphModal from "./SchemaGraphModal/SchemaGraphModal";
 import Sidebar from "./Sidebar/Sidebar";
 import UserMenu from "./UserMenu/UserMenu";
@@ -25,7 +24,6 @@ export default function ChatApp({ auth }) {
   const sessions = useChatSessions();
   const chat = useChat({ onChatCreated: sessions.addChat, onChatUpdated: sessions.touchChat });
   const [isGraphOpen, setIsGraphOpen] = useState(false);
-  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const handleDeleteChat = async (chatId) => {
@@ -45,12 +43,12 @@ export default function ChatApp({ auth }) {
           activeChatId={chat.chatId}
           isLoading={sessions.isLoading}
           error={sessions.error}
+          section={chat.section}
           onSelect={chat.openChat}
           onNew={chat.newChat}
           onRename={sessions.rename}
           onDelete={handleDeleteChat}
           onCollapse={() => setIsSidebarOpen(false)}
-          onOpenLibrary={() => setIsLibraryOpen(true)}
         />
       )}
 
@@ -128,7 +126,6 @@ export default function ChatApp({ auth }) {
       {isGraphOpen && (
         <SchemaGraphModal connectionId={connections.active?.id} onClose={() => setIsGraphOpen(false)} />
       )}
-      {isLibraryOpen && <LibraryModal onClose={() => setIsLibraryOpen(false)} />}
     </div>
   );
 }

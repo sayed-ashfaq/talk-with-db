@@ -1,5 +1,7 @@
 import ChatListItem from "./ChatListItem";
-import { DocumentIcon, PlusIcon, SidebarIcon } from "../common/icons";
+import DocumentsSection from "./DocumentsSection";
+import SectionSwitch from "../SectionSwitch/SectionSwitch";
+import { PlusIcon, SidebarIcon, SparkleIcon } from "../common/icons";
 import styles from "./Sidebar.module.css";
 
 export default function Sidebar({
@@ -7,29 +9,27 @@ export default function Sidebar({
   activeChatId,
   isLoading,
   error,
+  section,
   onSelect,
   onNew,
   onRename,
   onDelete,
   onCollapse,
-  onOpenLibrary,
 }) {
+  // a chat's section is fixed at creation, so picking the other one here can't change the
+  // current chat — it starts a fresh one instead. No-op if the already-active option is clicked,
+  // so this never discards an in-progress conversation for nothing.
+  const handleSectionSwitch = (value) => {
+    if (value !== section) onNew(value);
+  };
+
   return (
     <aside className={styles.root}>
-      <div className={styles.top}>
-        <button type="button" className={styles.newChatButton} onClick={onNew}>
-          <PlusIcon />
-          New chat
-        </button>
-        <button
-          type="button"
-          className={styles.collapseButton}
-          onClick={onOpenLibrary}
-          aria-label="Document library"
-          title="Document library"
-        >
-          <DocumentIcon />
-        </button>
+      <div className={styles.brandRow}>
+        <div className={styles.brandMark}>
+          <SparkleIcon />
+          <span>NL2SQL</span>
+        </div>
         <button
           type="button"
           className={styles.collapseButton}
@@ -40,6 +40,19 @@ export default function Sidebar({
           <SidebarIcon />
         </button>
       </div>
+
+      <div className={styles.sectionSwitchRow}>
+        <SectionSwitch value={section} onChange={handleSectionSwitch} compact />
+      </div>
+
+      <div className={styles.top}>
+        <button type="button" className={styles.newChatButton} onClick={() => onNew()}>
+          <PlusIcon />
+          New chat
+        </button>
+      </div>
+
+      <DocumentsSection />
 
       <div className={styles.list}>
         {isLoading ? (
