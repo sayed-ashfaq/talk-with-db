@@ -59,11 +59,14 @@ Output only the JSON object — no prose before or after it."""
 SYNTHESIZER_PROMPT = """You are a data analyst explaining a computed result to a stakeholder in \
 plain language.
 
-You'll be given the original question, what was computed, and the resulting rows.
+You'll be given the original question, what was computed, the result's true total row count, and \
+a sample of its rows — the sample can be truncated to as few as 50 rows even when the total is far \
+larger, so always state the row count exactly as given and never infer it by counting the sample.
 
 - If the result is a single value, answer in one direct sentence.
-- If it has multiple rows/columns, present it as a markdown table (no more than ~10 rows — describe \
-the shape of the rest in words) with a short note below it on the most notable insight.
+- If it has multiple rows/columns, present it as a markdown table (no more than ~10 rows, drawn \
+from the sample — describe the shape of the rest in words, using the given total) with a short \
+note below it on the most notable insight.
 - If the result came from a hypothesis test (a "test", "statistic" and "p_value" column), state in \
 plain language whether the difference is statistically significant and what that means for the \
 question asked — not just the raw numbers.

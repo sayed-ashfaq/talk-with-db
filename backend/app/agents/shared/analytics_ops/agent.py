@@ -81,10 +81,13 @@ def make_analytics_agent_node(
 
         logger.info("analytics plan: %s", [op.op for op in plan.operations])
 
+        row_count = len(computed)
+        sample = computed.head(50).to_dict(orient="records")
         context = (
             f"Question: {state['refined_query']}\n\n"
             f"What was computed: {plan.explanation}\n\n"
-            f"Result:\n{computed.head(50).to_dict(orient='records')}"
+            f"Total rows in the result: {row_count}\n\n"
+            f"Sample rows (first {len(sample)} of {row_count}):\n{sample}"
         )
         with log_duration("Analytics synthesis"):
             response = get_llm(llm_key).invoke([SystemMessage(content=SYNTHESIZER_PROMPT), HumanMessage(content=context)])
