@@ -39,20 +39,27 @@ _FILTER_FNS = {
 }
 
 
-def _require_columns(df: pd.DataFrame, columns: list[str]) -> None:
+def _require_columns(df: pd.DataFrame, columns: list[str], op: str) -> None:
     missing = [c for c in columns if c not in df.columns]
     if missing:
-        raise AnalyticsPlanError(f"plan referenced column(s) not in the result: {', '.join(missing)}")
+        # names the step and what was actually available at that point in the plan (not the
+        # original table's columns) — an earlier reshaping step (group_agg above all, which drops
+        # every column not named in its own by/aggregations) is the usual reason a column that
+        # existed at the start is gone by the time a later step reaches for it
+        raise AnalyticsPlanError(
+            f"the '{op}' step referenced column(s) not present at that point in the plan: "
+            f"{', '.join(missing)} (available then: {', '.join(df.columns)})"
+        )
 
 
 def _apply_filter(df: pd.DataFrame, op: FilterOp) -> pd.DataFrame:
-    _require_columns(df, [op.column])
+    _require_columns(df, [op.column], "filter")
     mask = _FILTER_FNS[op.operator](df[op.column], op.value)
     return df[mask]
 
 
 def _apply_group_agg(df: pd.DataFrame, op: GroupAggOp) -> pd.DataFrame:
-    _require_columns(df, [*op.by, *op.aggregations.keys()])
+    _require_columns(df, [*op.by, *op.aggregations.keys()], "group_agg")
     if not op.by:
         # no grouping dimension — a plain aggregate over the whole table (e.g. "what's the total
         # revenue", no GROUP BY equivalent). pandas' groupby([]) rejects this outright ("No group
@@ -63,12 +70,12 @@ def _apply_group_agg(df: pd.DataFrame, op: GroupAggOp) -> pd.DataFrame:
 
 
 def _apply_sort(df: pd.DataFrame, op: SortOp) -> pd.DataFrame:
-    _require_columns(df, op.by)
+    _require_columns(df, op.by, "sort")
     return df.sort_values(by=op.by, ascending=op.ascending)
 
 
 def _apply_pivot(df: pd.DataFrame, op: PivotOp) -> pd.DataFrame:
-    _require_columns(df, [op.index, op.columns, op.values])
+    _require_columns(df, [op.index, op.columns, op.values], "pivot")
     pivoted = df.pivot_table(index=op.index, columns=op.columns, values=op.values, aggfunc=op.aggfunc)
     return pivoted.reset_index()
 
@@ -77,9 +84,9 @@ def _apply_limit(df: pd.DataFrame, op: LimitOp) -> pd.DataFrame:
     return df.head(op.n)
 
 
-def _numeric_columns(df: pd.DataFrame, columns: list[str] | None) -> list[str]:
+def _numeric_columns(df: pd.DataFrame, columns: list[str] | None, op: str) -> list[str]:
     if columns is not None:
-        _require_columns(df, columns)
+        _require_columns(df, columns, op)
         non_numeric = [c for c in columns if not pd.api.types.is_numeric_dtype(df[c])]
         if non_numeric:
             raise AnalyticsPlanError(f"not numeric, can't compute statistics on: {', '.join(non_numeric)}")
@@ -88,7 +95,7 @@ def _numeric_columns(df: pd.DataFrame, columns: list[str] | None) -> list[str]:
 
 
 def _apply_describe(df: pd.DataFrame, op: DescribeOp) -> pd.DataFrame:
-    columns = _numeric_columns(df, op.columns)
+    columns = _numeric_columns(df, op.columns, "describe")
     if not columns:
         raise AnalyticsPlanError("no numeric columns to describe")
 
@@ -114,7 +121,7 @@ def _apply_describe(df: pd.DataFrame, op: DescribeOp) -> pd.DataFrame:
 
 
 def _apply_correlate(df: pd.DataFrame, op: CorrelateOp) -> pd.DataFrame:
-    columns = _numeric_columns(df, op.columns)
+    columns = _numeric_columns(df, op.columns, "correlate")
     if len(columns) < 2:
         raise AnalyticsPlanError("correlate needs at least two numeric columns")
 
@@ -128,7 +135,7 @@ def _apply_correlate(df: pd.DataFrame, op: CorrelateOp) -> pd.DataFrame:
 
 
 def _apply_compare(df: pd.DataFrame, op: CompareOp) -> pd.DataFrame:
-    _require_columns(df, [op.value, op.by])
+    _require_columns(df, [op.value, op.by], "compare")
     if not pd.api.types.is_numeric_dtype(df[op.value]):
         raise AnalyticsPlanError(f"'{op.value}' is not numeric — compare needs a numeric value column")
 

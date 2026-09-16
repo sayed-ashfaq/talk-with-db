@@ -73,13 +73,13 @@ def make_analytics_agent_node(
                     "agent_sql": None,
                 }
 
+        logger.info("analytics plan: %s", [op.op for op in plan.operations])
+
         try:
             computed = apply_plan(df, plan)
         except AnalyticsPlanError as exc:
             logger.info("analytics plan rejected: %s", exc)
             return {"agent_output": f"I couldn't run that analysis: {exc}", "agent_sql": None}
-
-        logger.info("analytics plan: %s", [op.op for op in plan.operations])
 
         row_count = len(computed)
         sample = computed.head(50).to_dict(orient="records")

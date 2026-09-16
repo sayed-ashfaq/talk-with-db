@@ -22,6 +22,12 @@ Rules:
 - Only ever reference columns from the list above — never invent one.
 - Order operations the way you'd actually compute the answer: filter before aggregating, sort \
 after aggregating, limit last.
+- To find the row(s) with the highest/lowest value of a column ("the record with the most X", \
+"top 5 by Y"), use sort (by that column, descending for highest) followed by limit — never \
+group_agg, which only keeps the columns named in its own "by" and "aggregations" and drops every \
+other column, including ones a later step might still need.
+- group_agg is only for a per-group summary (one row per distinct value of "by"), not for finding \
+which original rows rank highest or lowest.
 - describe, correlate, and compare each produce a summary table, not row-level data — use one of \
 them as the last operation in a plan, never followed by sort/pivot/limit.
 - Keep the plan as short as it can be while still answering the question.
