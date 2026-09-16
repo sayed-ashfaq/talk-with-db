@@ -47,4 +47,11 @@ def get_llm(agent: str, **kwargs):
         raise ValueError(f"No model configured for agent '{agent}'")
     if not settings.groq_api_key:
         raise ValueError("llm_provider='groq' but GROQ_API_KEY is not set")
+
+    # qwen3.x's reasoning_effort enum (none/default/minimal/low/medium/high/xhigh/max) isn't the
+    # same one gpt-oss accepts (low/medium/high only, confirmed against the live API) — sending it
+    # to a gpt-oss call 400s, so this is opt-in per model family rather than a blanket kwarg
+    if model.startswith("qwen/") and "reasoning_effort" not in kwargs:
+        kwargs["reasoning_effort"] = settings.reasoning_effort
+
     return ChatGroq(model=model, api_key=settings.groq_api_key, **kwargs)

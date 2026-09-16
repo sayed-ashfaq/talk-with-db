@@ -34,10 +34,19 @@ class Settings(BaseSettings):
     analytics_agent_model: str = "openai/gpt-oss-120b"
     # answers from retrieved document chunks / uploaded CSVs / search results — these are the
     # outputs the eventual local-model comparison gets judged against, so accuracy over cost: same
-    # tier as sql_agent/analytics_agent, not the lighter main_agent/visualizer tier
-    rag_agent_model: str = "openai/gpt-oss-120b"
-    csv_agent_model: str = "openai/gpt-oss-120b"
-    websearch_agent_model: str = "openai/gpt-oss-120b"
+    # tier as sql_agent/analytics_agent, not the lighter main_agent/visualizer tier.
+    # Currently qwen/qwen3.8-27b, swapped from openai/gpt-oss-120b to test it as a candidate —
+    # also multimodal (text+image input, confirmed via Groq's /v1/models), which gpt-oss isn't.
+    rag_agent_model: str = "qwen/qwen3.8-27b"
+    csv_agent_model: str = "qwen/qwen3.8-27b"
+    websearch_agent_model: str = "qwen/qwen3.8-27b"
+
+    # qwen3.x models on Groq accept a reasoning_effort parameter (validated server-side) that
+    # gpt-oss models don't share the same enum for — gpt-oss only takes low/medium/high, qwen also
+    # takes none/default/minimal/xhigh/max. get_llm() only forwards this to qwen-family models, so
+    # it's harmless for the gpt-oss agents. "none" for now — a user-facing control to raise this
+    # per request is a later addition, not built yet.
+    reasoning_effort: str = "none"
 
     # --- local LLM (only used when llm_provider="local") --------------------------------------
 
