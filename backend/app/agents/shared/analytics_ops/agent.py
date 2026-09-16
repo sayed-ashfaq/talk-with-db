@@ -20,6 +20,7 @@ from app.agents.shared.analytics_ops.executor import AnalyticsPlanError, apply_p
 from app.agents.shared.analytics_ops.ops import AnalyticsPlan
 from app.agents.shared.analytics_ops.prompts import JSON_MODE_INSTRUCTIONS, PLAN_PROMPT, SYNTHESIZER_PROMPT
 from app.agents.shared.tabular import QueryResult
+from app.agents.shared.visualizer import charts
 from app.core.llm import get_llm
 from app.core.logging import get_logger, log_duration
 
@@ -81,8 +82,9 @@ def make_analytics_agent_node(
             logger.info("analytics plan rejected: %s", exc)
             return {"agent_output": f"I couldn't run that analysis: {exc}", "agent_sql": None}
 
-        row_count = len(computed)
-        sample = computed.head(50).to_dict(orient="records")
+        computed_rows = computed.to_dict(orient="records")
+        row_count = len(computed_rows)
+        sample = computed_rows[:50]
         context = (
             f"Question: {state['refined_query']}\n\n"
             f"What was computed: {plan.explanation}\n\n"
@@ -92,17 +94,24 @@ def make_analytics_agent_node(
         with log_duration("Analytics synthesis"):
             response = get_llm(llm_key).invoke([SystemMessage(content=SYNTHESIZER_PROMPT), HumanMessage(content=context)])
 
+        # code decides whether this result can honestly be charted at all (candidates() below
+        # MIN_ROWS or with no numeric column returns none, no LLM call spent); the model only gets
+        # a say when more than one valid chart is on the table — same split sql_agent's own
+        # auto-chart uses, so a computed result and a queried one behave identically here
+        chart_spec, chart_profile = charts.select(
+            state["refined_query"], QueryResult(columns=list(computed.columns), rows=computed_rows, truncated=False)
+        )
+        if chart_spec:
+            logger.info("analytics chart: %s of %s by %s", chart_spec.type.value, ", ".join(chart_spec.y), chart_spec.x)
+
         return {
             "agent_output": response.content,
             "agent_sql": None,
-            "result_rows": computed.to_dict(orient="records"),
+            "result_rows": computed_rows,
             "result_columns": list(computed.columns),
             "result_truncated": False,
-            # a stale chart from an earlier turn must not linger next to numbers it no longer
-            # describes — charting this result is a normal follow-up turn away, same as any other
-            # "show that as a chart" ask, once it's persisted and read back as prior_result
-            "chart_spec": None,
-            "chart_profile": None,
+            "chart_spec": chart_spec,
+            "chart_profile": chart_profile,
         }
 
     return analytics_agent_node
