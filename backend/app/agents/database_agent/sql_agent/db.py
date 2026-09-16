@@ -28,10 +28,12 @@ _DRIVER = {
 
 # The ceiling on one result set. Enforced twice, deliberately: sql.apply_row_cap writes it into the
 # query so the database itself stops early, and the fetch below repeats it in case a query somehow
-# reaches here uncapped. 500 was enough while a result only ever became a paragraph of prose;
-# charts need the rows behind the summary, and 5000 is roughly where a browser stops rendering
-# them comfortably anyway.
-MAX_ROWS = 5000
+# reaches here uncapped. Kept well below general_agent.loader.MAX_ROWS (a CSV upload) on purpose: a
+# fetch here is live cost against the user's own database — query time, memory, and (unlike an
+# uploaded file whose shape the user already knows) an unpredictable column count — where a
+# storage/render-side cap (see app.services.results._fit) already bounds what actually reaches the
+# browser regardless of how many rows were fetched.
+MAX_ROWS = 20_000
 QUERY_TIMEOUT_MS = 10_000
 
 

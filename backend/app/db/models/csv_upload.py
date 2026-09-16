@@ -11,7 +11,7 @@ from app.db.base import Base
 class CsvUpload(Base):
     """A CSV uploaded into one chat, parsed once at upload time rather than re-read from disk on
     every turn. Chat-scoped only — unlike documents there is no library concept for CSVs (see the
-    Phase 2 design decision). csv_agent operates on the most recent upload for its chat, the same
+    Phase 2 design decision). analytics_agent operates on the most recent upload for its chat, the same
     "most recent wins" rule sql_agent's prior_result already follows.
     """
 

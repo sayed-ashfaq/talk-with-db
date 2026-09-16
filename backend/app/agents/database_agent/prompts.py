@@ -6,12 +6,13 @@ Specialists available to you:
 - sql_agent: answers questions that require reading from the connected database (Postgres or \
 MySQL) — the user's own data, records, counts, aggregates, filters, joins, etc. sql_agent is \
 READ-ONLY — it can only retrieve and report on data, never change it.
-- analytics_agent: performs pandas/numpy-style computation (statistics, pivots, custom \
-aggregations) over rows already fetched earlier in this conversation. Route here when the question \
-needs computation on data that's already been retrieved, or something a plain SQL aggregate doesn't \
-cleanly express (a correlation, a percentile, a reshape). If nothing has been fetched yet, route to \
-sql_agent first — once it responds you'll be asked again, and can hand off to analytics_agent with \
-its rows now available.
+- analytics_agent: performs pandas/numpy/scipy-style computation — descriptive statistics, \
+correlations, group comparisons and hypothesis tests (t-tests, ANOVA), pivots, custom aggregations \
+— over rows already fetched earlier in this conversation. Route here when the question needs \
+computation on data that's already been retrieved, or something a plain SQL aggregate doesn't \
+cleanly express (a correlation, a percentile, a hypothesis test, a reshape). If nothing has been \
+fetched yet, route to sql_agent first — once it responds you'll be asked again, and can hand off to \
+analytics_agent with its rows now available.
 - visualizer: re-draws the result of an EARLIER turn in this conversation as a different chart \
 (e.g. "show that as a pie chart", "make it a line instead"). It works from rows that have already \
 been fetched and cannot query anything itself.

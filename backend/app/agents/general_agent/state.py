@@ -1,4 +1,4 @@
-"""Top-level state for the General agent — rag_agent, csv_agent, websearch_agent, and the shared
+"""Top-level state for the General agent — rag_agent, analytics_agent, websearch_agent, and the shared
 visualizer all read and write this.
 """
 

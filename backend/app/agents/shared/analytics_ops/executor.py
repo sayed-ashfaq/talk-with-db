@@ -7,8 +7,19 @@ an unknown column is a rejected plan, not a pandas KeyError at runtime.
 """
 
 import pandas as pd
+from scipy import stats
 
-from app.agents.shared.analytics_ops.ops import AnalyticsPlan, FilterOp, GroupAggOp, LimitOp, PivotOp, SortOp
+from app.agents.shared.analytics_ops.ops import (
+    AnalyticsPlan,
+    CompareOp,
+    CorrelateOp,
+    DescribeOp,
+    FilterOp,
+    GroupAggOp,
+    LimitOp,
+    PivotOp,
+    SortOp,
+)
 from app.core.exceptions import NL2SQLError
 
 
@@ -42,6 +53,11 @@ def _apply_filter(df: pd.DataFrame, op: FilterOp) -> pd.DataFrame:
 
 def _apply_group_agg(df: pd.DataFrame, op: GroupAggOp) -> pd.DataFrame:
     _require_columns(df, [*op.by, *op.aggregations.keys()])
+    if not op.by:
+        # no grouping dimension — a plain aggregate over the whole table (e.g. "what's the total
+        # revenue", no GROUP BY equivalent). pandas' groupby([]) rejects this outright ("No group
+        # keys passed!"), so it's handled directly rather than routed through groupby at all.
+        return pd.DataFrame([df.agg(op.aggregations)])
     grouped = df.groupby(op.by, dropna=False).agg(op.aggregations)
     return grouped.reset_index()
 
@@ -61,12 +77,105 @@ def _apply_limit(df: pd.DataFrame, op: LimitOp) -> pd.DataFrame:
     return df.head(op.n)
 
 
+def _numeric_columns(df: pd.DataFrame, columns: list[str] | None) -> list[str]:
+    if columns is not None:
+        _require_columns(df, columns)
+        non_numeric = [c for c in columns if not pd.api.types.is_numeric_dtype(df[c])]
+        if non_numeric:
+            raise AnalyticsPlanError(f"not numeric, can't compute statistics on: {', '.join(non_numeric)}")
+        return columns
+    return [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+
+
+def _apply_describe(df: pd.DataFrame, op: DescribeOp) -> pd.DataFrame:
+    columns = _numeric_columns(df, op.columns)
+    if not columns:
+        raise AnalyticsPlanError("no numeric columns to describe")
+
+    rows = []
+    for name in columns:
+        present = df[name].dropna()
+        rows.append(
+            {
+                "column": name,
+                "count": int(present.count()),
+                "mean": present.mean(),
+                "median": present.median(),
+                "std": present.std(),
+                "min": present.min(),
+                "25%": present.quantile(0.25),
+                "75%": present.quantile(0.75),
+                "max": present.max(),
+                "nunique": int(present.nunique()),
+                "nulls": int(df[name].isna().sum()),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _apply_correlate(df: pd.DataFrame, op: CorrelateOp) -> pd.DataFrame:
+    columns = _numeric_columns(df, op.columns)
+    if len(columns) < 2:
+        raise AnalyticsPlanError("correlate needs at least two numeric columns")
+
+    corr = df[columns].corr(method=op.method)
+    rows = [
+        {"column_a": a, "column_b": b, "correlation": corr.loc[a, b]}
+        for i, a in enumerate(columns)
+        for b in columns[i + 1 :]
+    ]
+    return pd.DataFrame(rows)
+
+
+def _apply_compare(df: pd.DataFrame, op: CompareOp) -> pd.DataFrame:
+    _require_columns(df, [op.value, op.by])
+    if not pd.api.types.is_numeric_dtype(df[op.value]):
+        raise AnalyticsPlanError(f"'{op.value}' is not numeric — compare needs a numeric value column")
+
+    groups = {
+        str(name): values
+        for name, g in df.groupby(op.by, dropna=True)
+        if (values := g[op.value].dropna().to_numpy()).size > 0
+    }
+    if len(groups) < 2:
+        raise AnalyticsPlanError(f"'{op.by}' doesn't have at least two groups with data to compare")
+
+    if len(groups) == 2:
+        (_, a), (_, b) = groups.items()
+        # Welch's t-test — doesn't assume the two groups have equal variance, the safer default
+        # when that's unknown, which it always is here
+        statistic, p_value = stats.ttest_ind(a, b, equal_var=False)
+        test = "t-test"
+    else:
+        statistic, p_value = stats.f_oneway(*groups.values())
+        test = "ANOVA"
+
+    return pd.DataFrame(
+        [
+            {
+                "group": name,
+                "n": len(values),
+                "mean": values.mean(),
+                "std": values.std(ddof=1) if len(values) > 1 else 0.0,
+                "test": test,
+                "statistic": statistic,
+                "p_value": p_value,
+                "significant_at_0.05": bool(p_value < 0.05),
+            }
+            for name, values in groups.items()
+        ]
+    )
+
+
 _HANDLERS = {
     "filter": _apply_filter,
     "group_agg": _apply_group_agg,
     "sort": _apply_sort,
     "pivot": _apply_pivot,
     "limit": _apply_limit,
+    "describe": _apply_describe,
+    "correlate": _apply_correlate,
+    "compare": _apply_compare,
 }
 
 

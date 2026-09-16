@@ -49,6 +49,12 @@ export function listChats() {
   return request("/chats");
 }
 
+// Creates a chat with no first message — used only so a file attached before any text is typed
+// has a chat_id to upload into right away. `title` typically comes from the attached file's name.
+export function createChat(section, title) {
+  return request("/chats", { method: "POST", body: JSON.stringify({ section, title }) });
+}
+
 export function getChat(chatId) {
   return request(`/chats/${chatId}`);
 }
@@ -114,7 +120,7 @@ export function deleteDocument(id) {
   return request(`/documents/${id}`, { method: "DELETE" });
 }
 
-// Replaces nothing server-side — csv_agent always reads the most recent upload for this chat.
+// Replaces nothing server-side — analytics_agent always reads the most recent upload for this chat.
 export function uploadCsv(chatId, file) {
   const body = new FormData();
   body.append("file", file);

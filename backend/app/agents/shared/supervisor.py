@@ -8,7 +8,7 @@ generalized over whichever specialists a given agent actually has — so the two
 Two shapes come out of build_agent_graph:
 - With specialists: a supervisor LLM call picks a route, a specialist runs, the supervisor is asked
   again whether that resolved the question, up to max_attempts.
-- With no specialists at all (e.g. the General agent before rag_agent/csv_agent exist): there is only
+- With no specialists at all (e.g. the General agent before rag_agent/analytics_agent exist): there is only
   one possible destination, so a routing call every turn would be pure waste — go straight to the
   direct-response node.
 """

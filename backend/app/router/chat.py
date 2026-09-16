@@ -106,7 +106,7 @@ async def chat(request: ChatRequest, user: CurrentUser, session: SessionDep) -> 
         # synchronously on a worker thread with no way to await a second read. One indexed lookup
         # against our own metadata store, next to a turn that spends seconds in LLM calls.
         prior = result_service.from_storage(await chat_service.load_last_result(session, chat_row.id))
-        # same reasoning, same constraint — csv_agent needs this chat's uploaded CSV (if any)
+        # same reasoning, same constraint — analytics_agent needs this chat's uploaded CSV (if any)
         # already in hand when the graph starts, since it can't await a read mid-turn either. Only
         # a "general" chat can have one, so this skips the query for a "database" chat entirely.
         csv_context = (

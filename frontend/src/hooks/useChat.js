@@ -48,13 +48,12 @@ export function useChat({ onChatCreated, onChatUpdated } = {}) {
   const [section, setSection] = useState("general");
   const chatIdRef = useRef(null);
 
-  // a file picked before the chat exists (POST /chat requires non-empty text, so a chat can never
-  // be created from an attachment alone) — held here until the first message returns a chat_id
-  const [stagedFile, setStagedFile] = useState(null); // { file, kind: "pdf" | "csv" } | null
   const [isUploading, setIsUploading] = useState(false);
+  // the file currently in flight, so the input can show what it's uploading rather than a bare spinner
+  const [uploadingFileName, setUploadingFileName] = useState(null);
   const [uploadError, setUploadError] = useState(null);
-  // so a second CSV upload in the same chat can say what it replaced — csv_agent always answers
-  // from the most recent one, and that's otherwise invisible to the user
+  // so a second CSV upload in the same chat can say what it replaced — analytics_agent always
+  // answers from the most recent one, and that's otherwise invisible to the user
   const lastCsvFilenameRef = useRef(null);
 
   // start a new conversation: no request needed, the chat row is created by the first message.
@@ -66,7 +65,6 @@ export function useChat({ onChatCreated, onChatUpdated } = {}) {
     setMessages([]);
     setError(null);
     if (targetSection) setSection(targetSection);
-    setStagedFile(null);
     setUploadError(null);
     lastCsvFilenameRef.current = null;
   }, []);
@@ -79,7 +77,6 @@ export function useChat({ onChatCreated, onChatUpdated } = {}) {
       chatIdRef.current = chat.id;
       setMessages(chat.messages.map(toMessage));
       setSection(chat.section);
-      setStagedFile(null);
       setUploadError(null);
       lastCsvFilenameRef.current = null;
     } catch (err) {
@@ -89,10 +86,10 @@ export function useChat({ onChatCreated, onChatUpdated } = {}) {
     }
   }, []);
 
-  // shared by the staged-file flow (chat just got its id) and the direct-upload flow (chat
-  // already existed) — appends a confirmation chip to the thread rather than a real chat turn
+  // appends a confirmation chip to the thread rather than a real chat turn
   const performUpload = useCallback(async (targetChatId, file, kind) => {
     setIsUploading(true);
+    setUploadingFileName(file.name);
     setUploadError(null);
     try {
       if (kind === "pdf") {
@@ -122,11 +119,16 @@ export function useChat({ onChatCreated, onChatUpdated } = {}) {
       setUploadError(err.message || "Upload failed. Please try again.");
     } finally {
       setIsUploading(false);
+      setUploadingFileName(null);
     }
   }, []);
 
+  // Both upload routes require a chat_id, but POST /chat can't create one from an attachment
+  // alone (it needs a non-empty message). So a file picked before the first message creates the
+  // chat itself, via the message-less POST /chats, and uploads into it immediately — no more
+  // waiting on the user to type something first.
   const attachFile = useCallback(
-    (file) => {
+    async (file) => {
       const kind = classifyFile(file);
       if (!kind) {
         setUploadError("Only PDF and CSV files are supported.");
@@ -137,16 +139,23 @@ export function useChat({ onChatCreated, onChatUpdated } = {}) {
         return;
       }
       setUploadError(null);
-      if (chatIdRef.current === null) {
-        setStagedFile({ file, kind });
-      } else {
-        performUpload(chatIdRef.current, file, kind);
-      }
-    },
-    [performUpload],
-  );
 
-  const clearStagedFile = useCallback(() => setStagedFile(null), []);
+      let targetChatId = chatIdRef.current;
+      if (targetChatId === null) {
+        try {
+          const created = await api.createChat(section, file.name);
+          targetChatId = created.id;
+          chatIdRef.current = created.id;
+          onChatCreated?.({ id: created.id, title: created.title });
+        } catch (err) {
+          setUploadError(err.message || "Couldn't start a new chat for this upload.");
+          return;
+        }
+      }
+      performUpload(targetChatId, file, kind);
+    },
+    [section, performUpload, onChatCreated],
+  );
 
   const sendMessage = useCallback(
     async (text) => {
@@ -170,11 +179,6 @@ export function useChat({ onChatCreated, onChatUpdated } = {}) {
 
         if (isNew) {
           onChatCreated?.({ id: response.chat_id, title: response.title });
-          if (stagedFile) {
-            const toUpload = stagedFile;
-            setStagedFile(null);
-            performUpload(response.chat_id, toUpload.file, toUpload.kind);
-          }
         } else {
           onChatUpdated?.(response.chat_id);
         }
@@ -184,7 +188,7 @@ export function useChat({ onChatCreated, onChatUpdated } = {}) {
         setIsSending(false);
       }
     },
-    [isSending, section, stagedFile, performUpload, onChatCreated, onChatUpdated],
+    [isSending, section, onChatCreated, onChatUpdated],
   );
 
   return {
@@ -200,10 +204,9 @@ export function useChat({ onChatCreated, onChatUpdated } = {}) {
     // locked once the conversation has actually started — a chat's section can't change after
     // creation, so the switcher shouldn't offer to either
     setSection: chatIdRef.current === null ? setSection : undefined,
-    stagedFile,
     attachFile,
-    clearStagedFile,
     isUploading,
+    uploadingFileName,
     uploadError,
   };
 }

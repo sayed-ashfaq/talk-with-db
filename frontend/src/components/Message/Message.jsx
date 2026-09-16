@@ -16,7 +16,6 @@ const ROUTE_LABELS = {
   sql_agent: "SQL query",
   analytics_agent: "Analytics",
   rag_agent: "Your documents",
-  csv_agent: "CSV data",
   websearch_agent: "Web search",
   visualizer: "Chart",
 };

@@ -95,11 +95,10 @@ export default function ChatApp({ auth }) {
               section={chat.section}
               onSectionChange={chat.setSection}
               onSend={chat.sendMessage}
-              disabled={chat.isSending}
+              disabled={chat.isSending || chat.isUploading}
               onAttach={chat.attachFile}
-              stagedFile={chat.stagedFile}
-              onClearStaged={chat.clearStagedFile}
               isUploading={chat.isUploading}
+              uploadingFileName={chat.uploadingFileName}
               uploadError={chat.uploadError}
             />
           ) : (
@@ -111,12 +110,11 @@ export default function ChatApp({ auth }) {
               />
               <ChatInput
                 onSend={chat.sendMessage}
-                disabled={chat.isSending}
+                disabled={chat.isSending || chat.isUploading}
                 section={chat.section}
                 onAttach={chat.attachFile}
-                stagedFile={chat.stagedFile}
-                onClearStaged={chat.clearStagedFile}
                 isUploading={chat.isUploading}
+                uploadingFileName={chat.uploadingFileName}
               />
             </>
           )}

@@ -9,9 +9,8 @@ export default function ChatInput({
   disabled,
   section,
   onAttach,
-  stagedFile,
-  onClearStaged,
   isUploading,
+  uploadingFileName,
   uploadError,
 }) {
   const [value, setValue] = useState("");
@@ -53,14 +52,11 @@ export default function ChatInput({
 
   return (
     <div className={styles.wrap}>
-      {stagedFile && (
+      {isUploading && (
         <div className={styles.stagedChip}>
           <DocumentIcon />
-          <span className={styles.stagedName}>{stagedFile.file.name}</span>
-          <span className={styles.stagedHint}>attaches once you send</span>
-          <button type="button" className={styles.stagedRemove} onClick={onClearStaged} aria-label="Remove attachment">
-            ×
-          </button>
+          <span className={styles.stagedName}>{uploadingFileName}</span>
+          <span className={styles.stagedHint}>uploading…</span>
         </div>
       )}
 

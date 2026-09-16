@@ -44,9 +44,8 @@ export default function Landing({
   onSend,
   disabled,
   onAttach,
-  stagedFile,
-  onClearStaged,
   isUploading,
+  uploadingFileName,
   uploadError,
 }) {
   const greeting = useMemo(() => randomGreeting(user), [user]);
@@ -67,9 +66,8 @@ export default function Landing({
           disabled={disabled}
           section={section}
           onAttach={onAttach}
-          stagedFile={stagedFile}
-          onClearStaged={onClearStaged}
           isUploading={isUploading}
+          uploadingFileName={uploadingFileName}
           uploadError={uploadError}
         />
       </div>

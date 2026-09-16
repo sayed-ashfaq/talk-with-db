@@ -1,6 +1,6 @@
 """A generic tabular result — rows + columns + a truncation flag — with no assumption about where
 the rows came from. sql_agent's run_query produces one from a live query, but analytics_ops,
-visualizer, and csv_agent all consume this shape regardless of source, so it lives here rather than
+visualizer, and analytics_agent all consume this shape regardless of source, so it lives here rather than
 under sql_agent.
 """
 

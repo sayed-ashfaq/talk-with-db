@@ -6,11 +6,11 @@ validated set of shapes; app.agents.shared.analytics_ops.executor is the only th
 actual pandas call.
 """
 
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
-AggFunc = Literal["sum", "mean", "count", "min", "max", "median", "nunique"]
+AggFunc = Literal["sum", "mean", "count", "min", "max", "median", "nunique", "std", "var"]
 FilterOperator = Literal["eq", "ne", "gt", "gte", "lt", "lte", "in", "contains"]
 
 
@@ -50,8 +50,30 @@ class LimitOp(BaseModel):
     n: int
 
 
+class DescribeOp(BaseModel):
+    op: Literal["describe"]
+    # None = every numeric column
+    columns: Optional[list[str]] = None
+
+
+class CorrelateOp(BaseModel):
+    op: Literal["correlate"]
+    # None = every numeric column
+    columns: Optional[list[str]] = None
+    method: Literal["pearson", "spearman"] = "pearson"
+
+
+class CompareOp(BaseModel):
+    op: Literal["compare"]
+    # numeric column to compare
+    value: str
+    # categorical column whose groups are compared — 2 groups runs a t-test, 3+ runs ANOVA, decided
+    # by the executor from how many groups actually exist, not chosen by the model
+    by: str
+
+
 Operation = Annotated[
-    Union[FilterOp, GroupAggOp, SortOp, PivotOp, LimitOp],
+    Union[FilterOp, GroupAggOp, SortOp, PivotOp, LimitOp, DescribeOp, CorrelateOp, CompareOp],
     Field(discriminator="op"),
 ]
 

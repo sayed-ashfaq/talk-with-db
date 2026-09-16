@@ -101,21 +101,6 @@
   font-size: 12px;
 }
 
-.stagedRemove {
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  border-radius: var(--radius-sm);
-  font-size: 15px;
-  line-height: 1;
-  color: var(--color-text-secondary);
-}
-
-.stagedRemove:hover {
-  background: var(--color-bg);
-  color: var(--color-text);
-}
-
 .uploadError {
   margin: 0 0 8px;
   font-size: 12px;
